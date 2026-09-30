@@ -62,10 +62,10 @@ With a few Claude Code hooks, each tab's name shows its session's state:
 
 | Tab | Means |
 |---|---|
-| `… api` | working |
+| ` api` | working (a Nerd Font spinner) |
 | `✓ api` | finished: your turn |
 | `● api` | waiting for you: a permission prompt or a question |
-| `api` | idle since it started |
+| `○ api` | idle: started, no task yet |
 
 Merge [`examples/claude-settings-hooks.json`](examples/claude-settings-hooks.json) into the
 `hooks` of `~/.claude/settings.json`. Each hook runs `czw mark STATE`, which renames only
@@ -123,7 +123,7 @@ the model, and how full the context is (green, yellow, red). In `~/.claude/setti
 | `czw new NAME [FOLDER] [TAB]` | inside a workspace: a new named session in a new tab, added to `sessions.txt` |
 | `czw claude NAME` | run session NAME: resume it, or start it with that name the first time |
 | `czw list [DIR]` | the sessions a workspace opens |
-| `czw mark STATE` | from a hook: `working`, `done`, `attention`, `unblock` (attention back to working) or `clear` |
+| `czw mark STATE` | from a hook: `working`, `done`, `attention`, `idle`, `unblock` (attention back to working) or `clear` |
 | `czw status` | which sessions need you, finished, or work |
 | `czw next` | go to the next tab that needs you (`Alt a`) |
 | `czw statusline` | Claude Code's status line |

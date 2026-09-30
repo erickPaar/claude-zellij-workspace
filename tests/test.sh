@@ -65,8 +65,10 @@ wait_for "zellij --session czw-test action query-tab-names" && ok "session start
 mark() { (cd "$tmp" && CZW_NOTIFY=off XDG_STATE_HOME="$tmp/state" ZELLIJ_SESSION_NAME=czw-test ZELLIJ_PANE_ID=0 "$root/bin/czw" mark "$1"); zellij --session czw-test action query-tab-names | head -1; }
 [[ "$(mark done)" == "✓ alpha" ]] && ok "mark: done" || ko "mark done"
 [[ "$(mark attention)" == "● alpha" ]] && ok "mark: attention replaces the old marker" || ko "mark attention"
-[[ "$(mark unblock)" == "… alpha" ]] && ok "mark: unblock turns attention into working" || ko "mark unblock"
-[[ "$(mark unblock)" == "… alpha" ]] && ok "mark: unblock leaves other states alone" || ko "mark unblock twice"
+[[ "$(mark unblock)" == " alpha" ]] && ok "mark: unblock turns attention into working" || ko "mark unblock"
+[[ "$(mark unblock)" == " alpha" ]] && ok "mark: unblock leaves other states alone" || ko "mark unblock twice"
+[[ "$(mark idle)" == "○ alpha" ]] && ok "mark: idle" || ko "mark idle"
+[[ "$(mark working)" == " alpha" ]] && ok "mark: working replaces idle" || ko "mark working"
 grep -q '● 1' "$tmp/state/czw/status/czw-test" 2>/dev/null || [[ -f "$tmp/state/czw/status/czw-test" ]] && ok "mark: writes the bar's status file in the state folder" || ko "mark: no status file"
 [[ ! -e "$tmp/working" && ! -e "$tmp/unblock" && ! -e "$tmp/attention" ]] && ok "mark: nothing written to the current folder" || ko "mark wrote into the current folder"
 [[ "$(mark clear)" == "alpha" ]] && ok "mark: clear" || ko "mark clear"

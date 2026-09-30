@@ -120,18 +120,20 @@ cmd_new() {
 }
 
 # Show a Claude session's state in its tab name, from Claude Code hooks:
-#   working "… name", done "✓ name" (your turn), attention "● name" (a permission
-#   prompt or a question waits), clear "name". `unblock` only turns attention back
-#   into working (after a tool ran, the prompt was answered). Outside zellij: no-op.
+#   working " name" (a Nerd Font spinner), done "✓ name" (your turn), attention
+#   "● name" (a permission prompt or a question waits), idle "○ name" (started, no
+#   task yet), clear "name". `unblock` only turns attention back into working (after a
+#   tool ran, the prompt was answered). Outside zellij: no-op.
 cmd_mark() {
   local want="${1:-}" marker="" pane tab_id tab_name base new
   [[ -n "${ZELLIJ_PANE_ID:-}" && -n "${ZELLIJ_SESSION_NAME:-}" ]] || return 0
   case "$want" in
-    working) marker="… " ;;
+    working) marker=" " ;;
     done) marker="✓ " ;;
     attention) marker="● " ;;
+    idle) marker="○ " ;;
     clear|unblock) marker="" ;;
-    *) die "usage: czw mark working|done|attention|unblock|clear" ;;
+    *) die "usage: czw mark working|done|attention|idle|unblock|clear" ;;
   esac
   pane="$ZELLIJ_PANE_ID"
   read -r tab_id tab_name < <(timeout 3 zellij action list-panes --tab --json 2>/dev/null | python3 -c '
@@ -142,10 +144,10 @@ for p in json.load(sys.stdin):
 ' "$pane") || return 0
   [[ -n "${tab_id:-}" ]] || return 0
   base="$tab_name"
-  for m in "… " "✓ " "● "; do base="${base#"$m"}"; done
+  for m in " " "… " "✓ " "● " "○ "; do base="${base#"$m"}"; done
   if [[ "$want" == unblock ]]; then
     [[ "$tab_name" == "● "* ]] || return 0
-    marker="… "
+    marker=" "
   fi
   new="$marker$base"
   [[ "$new" == "$tab_name" ]] || timeout 3 zellij action rename-tab-by-id "$tab_id" "$new" >/dev/null 2>&1 || true
@@ -222,12 +224,12 @@ styled = sys.argv[1] == "2"
 names = [l.rstrip("\n") for l in sys.stdin if l.strip()]
 need = [n[2:] for n in names if n.startswith("● ")]
 done = [n[2:] for n in names if n.startswith("✓ ")]
-busy = [n[2:] for n in names if n.startswith("… ")]
+busy = [n[2:] for n in names if n.startswith(" ") or n.startswith("… ")]
 if bar:
     parts = []
     if need: parts.append(("#[fg=#f38ba8,bg=#181825,bold]" if styled else "") + "● %d" % len(need))
     if done: parts.append(("#[fg=#a6e3a1,bg=#181825,bold]" if styled else "") + "✓ %d" % len(done))
-    if busy: parts.append(("#[fg=#6c7086,bg=#181825]" if styled else "") + "… %d" % len(busy))
+    if busy: parts.append(("#[fg=#89b4fa,bg=#181825]" if styled else "") + " %d" % len(busy))
     out = "  ".join(parts)
     print(out + ("  " if styled and out else ""))
 else:
