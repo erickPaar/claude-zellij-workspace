@@ -21,6 +21,12 @@ check_hook "claude -p summarize" "claude -p summarize"
 check_hook "bash /x/czw claude alpha" "bash /x/czw claude alpha"
 check_hook "htop" "htop"
 
+# 1b. The status line: every field optional, never a traceback.
+sl="$(printf '%s' '{"session_name":"api","workspace":{"current_dir":"/tmp"},"model":{"display_name":"Opus"},"context_window":{"used_percentage":85},"pr":{"number":7,"review_state":"approved"}}' | "$root/bin/czw" statusline | sed 's/\x1b\[[0-9;]*m//g')"
+[[ "$sl" == *"api"* && "$sl" == *"Opus"* && "$sl" == *"#7 approved"* && "$sl" == *"85%"* ]] && ok "statusline: all fields" || ko "statusline: '$sl'"
+[[ -n "$(echo '{}' | "$root/bin/czw" statusline)" ]] && ok "statusline: empty input" || ko "statusline: empty input"
+[[ -n "$(echo 'not json' | "$root/bin/czw" statusline 2>&1)" ]] && ok "statusline: bad input" || ko "statusline: bad input"
+
 # 2. The layout: one tab per session, run through czw, then tabs.kdl.
 ws="$tmp/ws"; mkdir -p "$ws/sub"
 cat > "$ws/sessions.txt" <<TXT
@@ -49,17 +55,27 @@ mkdir -p "$tmp/state/czw/known" && touch "$tmp/state/czw/known/proj-alpha"
 rm "$ws/tabs.kdl"
 cfg="$tmp/zellij"; mkdir -p "$cfg"
 sed "s#@CZW_ROOT@#$root#g" "$root/share/config.kdl" | sed 's/^serialization_interval 30/serialization_interval 2/' > "$cfg/config.kdl"
+python3 "$root/lib/layout.py" --default "$cfg/layouts/czw.kdl" czw-test
+grep -q 'Run "czw" "next"' "$cfg/config.kdl" && ok "config: Alt a runs czw next" || ko "config: no Alt a"
 env_run() { PATH="$tmp/bin:$PATH" XDG_STATE_HOME="$tmp/state" "$@"; }
 python3 "$root/lib/layout.py" "$ws" "$tmp/layout.kdl"
 (env_run setsid script -qfc "zellij --config-dir $cfg --session czw-test --new-session-with-layout $tmp/layout.kdl" /dev/null >/dev/null 2>&1 </dev/null &)
 wait_for "zellij --session czw-test action query-tab-names" && ok "session started" || ko "session did not start"
 [[ "$(zellij --session czw-test action query-tab-names | tr '\n' ' ')" == "alpha b " ]] && ok "tabs come from the workspace layout" || ko "tabs are not the layout's (zellij used another layout)"
-mark() { ZELLIJ_SESSION_NAME=czw-test ZELLIJ_PANE_ID=0 "$root/bin/czw" mark "$1"; zellij --session czw-test action query-tab-names | head -1; }
+mark() { (cd "$tmp" && CZW_NOTIFY=off XDG_STATE_HOME="$tmp/state" ZELLIJ_SESSION_NAME=czw-test ZELLIJ_PANE_ID=0 "$root/bin/czw" mark "$1"); zellij --session czw-test action query-tab-names | head -1; }
 [[ "$(mark done)" == "✓ alpha" ]] && ok "mark: done" || ko "mark done"
 [[ "$(mark attention)" == "● alpha" ]] && ok "mark: attention replaces the old marker" || ko "mark attention"
 [[ "$(mark unblock)" == "… alpha" ]] && ok "mark: unblock turns attention into working" || ko "mark unblock"
 [[ "$(mark unblock)" == "… alpha" ]] && ok "mark: unblock leaves other states alone" || ko "mark unblock twice"
+grep -q '● 1' "$tmp/state/czw/status/czw-test" 2>/dev/null || [[ -f "$tmp/state/czw/status/czw-test" ]] && ok "mark: writes the bar's status file in the state folder" || ko "mark: no status file"
+[[ ! -e "$tmp/working" && ! -e "$tmp/unblock" && ! -e "$tmp/attention" ]] && ok "mark: nothing written to the current folder" || ko "mark wrote into the current folder"
 [[ "$(mark clear)" == "alpha" ]] && ok "mark: clear" || ko "mark clear"
+ZELLIJ_SESSION_NAME=czw-test ZELLIJ_PANE_ID=1 XDG_STATE_HOME="$tmp/state" CZW_NOTIFY=off "$root/bin/czw" mark attention
+ZELLIJ_SESSION_NAME=czw-test "$root/bin/czw" next
+active="$(zellij --session czw-test action list-tabs --json | python3 -c 'import json,sys; print(next(t["name"] for t in json.load(sys.stdin) if t["active"]))')"
+[[ "$active" == "● b" ]] && ok "next: goes to the tab that needs you" || ko "next went to '$active'"
+ZELLIJ_SESSION_NAME=czw-test ZELLIJ_PANE_ID=1 XDG_STATE_HOME="$tmp/state" CZW_NOTIFY=off "$root/bin/czw" mark clear
+zellij --session czw-test action go-to-tab 1
 [[ "$(zellij --session czw-test action query-tab-names | sed -n 2p)" == "b" ]] && ok "mark: only the pane's own tab changes" || ko "mark touched another tab"
 (unset ZELLIJ_PANE_ID; "$root/bin/czw" mark done) && ok "mark: no-op outside zellij" || ko "mark failed outside zellij"
 wait_for "[[ \$(grep -c . $tmp/calls 2>/dev/null) -ge 2 ]]" 10 && ok "both sessions ran" || ko "sessions did not run"

@@ -7,6 +7,9 @@
 #   czw claude NAME [ARGS...]      run session NAME (resume it, or start it with that name)
 #   czw list [DIR]                 the sessions a workspace opens
 #   czw mark STATE                 from Claude Code hooks: show the session's state in its tab
+#   czw status [--bar]             which sessions need you (--zjstatus: colored, for the bar)
+#   czw next                       go to the next tab that needs you (Alt a)
+#   czw statusline                 Claude Code's status line (settings.json statusLine)
 #   czw version
 set -euo pipefail
 
@@ -37,6 +40,17 @@ config_dir() {
 
 exists() { zellij list-sessions -n -s 2>/dev/null | grep -qx "$1"; }
 
+# zjstatus asks for permissions in the one-line bar, where the prompt is easy to miss and
+# the bar stays blank until answered. czw pins the plugin it installs, so it grants them.
+grant_bar() {
+  local plugin="${XDG_DATA_HOME:-$HOME/.local/share}/czw/plugins/zjstatus.wasm"
+  local perms="${XDG_CACHE_HOME:-$HOME/.cache}/zellij/permissions.kdl"
+  [[ -f "$plugin" ]] || return 0
+  grep -qF "\"$plugin\"" "$perms" 2>/dev/null && return 0
+  mkdir -p "$(dirname "$perms")"
+  printf '"%s" {\n    ReadApplicationState\n    ChangeApplicationState\n    RunCommands\n}\n' "$plugin" >> "$perms"
+}
+
 cmd_open() {
   local dir="" mode=""
   for a in "$@"; do
@@ -56,7 +70,9 @@ cmd_open() {
   layout="$cache/layouts/$name.kdl"
   cfg="$(config_dir)"
   mkdir -p "$state/workspaces" && echo "$dir" > "$state/workspaces/$name"
+  grant_bar
   python3 "$root/lib/layout.py" "$dir" "$layout"
+  python3 "$root/lib/layout.py" --default "$cfg/layouts/czw.kdl" "$name"
   if [[ "$mode" == --fresh ]] && exists "$name"; then
     read -r -p "This closes the zellij session $name and reopens every tab. Continue? [y/N] " ok
     [[ "$ok" == [yY] ]] || exit 1
@@ -100,8 +116,7 @@ cmd_new() {
     printf '%-24s %s%s\n' "$name" "${folder/#$HOME/\~}" "$([[ -n "${3:-}" ]] && echo " $tab")" >>"$dir/sessions.txt"
     echo "sessions.txt: + $name"
   fi
-  zellij action new-tab --name "$tab" --cwd "$folder" --layout-string \
-    "layout { pane command=\"czw\" name=\"$name\" { args \"claude\" \"$name\"; }; pane size=1 borderless=true { plugin location=\"zellij:compact-bar\"; }; }"
+  zellij action new-tab --layout-string "$(python3 "$root/lib/layout.py" --tab "$name" "$folder" "$tab" "$ZELLIJ_SESSION_NAME")"
 }
 
 # Show a Claude session's state in its tab name, from Claude Code hooks:
@@ -109,9 +124,9 @@ cmd_new() {
 #   prompt or a question waits), clear "name". `unblock` only turns attention back
 #   into working (after a tool ran, the prompt was answered). Outside zellij: no-op.
 cmd_mark() {
-  local state="${1:-}" marker="" pane tab_id tab_name base new
+  local want="${1:-}" marker="" pane tab_id tab_name base new
   [[ -n "${ZELLIJ_PANE_ID:-}" && -n "${ZELLIJ_SESSION_NAME:-}" ]] || return 0
-  case "$state" in
+  case "$want" in
     working) marker="… " ;;
     done) marker="✓ " ;;
     attention) marker="● " ;;
@@ -119,7 +134,7 @@ cmd_mark() {
     *) die "usage: czw mark working|done|attention|unblock|clear" ;;
   esac
   pane="$ZELLIJ_PANE_ID"
-  read -r tab_id tab_name < <(zellij action list-panes --tab --json 2>/dev/null | python3 -c '
+  read -r tab_id tab_name < <(timeout 3 zellij action list-panes --tab --json 2>/dev/null | python3 -c '
 import json, sys
 for p in json.load(sys.stdin):
     if not p.get("is_plugin") and str(p.get("id")) == sys.argv[1]:
@@ -128,12 +143,98 @@ for p in json.load(sys.stdin):
   [[ -n "${tab_id:-}" ]] || return 0
   base="$tab_name"
   for m in "… " "✓ " "● "; do base="${base#"$m"}"; done
-  if [[ "$state" == unblock ]]; then
+  if [[ "$want" == unblock ]]; then
     [[ "$tab_name" == "● "* ]] || return 0
     marker="… "
   fi
   new="$marker$base"
-  [[ "$new" == "$tab_name" ]] || zellij action rename-tab-by-id "$tab_id" "$new" >/dev/null 2>&1 || true
+  [[ "$new" == "$tab_name" ]] || timeout 3 zellij action rename-tab-by-id "$tab_id" "$new" >/dev/null 2>&1 || true
+  [[ "$want" == attention || "$want" == done ]] && [[ "$new" != "$tab_name" ]] && ( notify "$want" "$base" "$tab_id" & )
+  # The bar reads this file instead of asking zellij: written only when a mark changes.
+  mkdir -p "$state/status"
+  cmd_status --zjstatus --session "$ZELLIJ_SESSION_NAME" > "$state/status/$ZELLIJ_SESSION_NAME.tmp" 2>/dev/null \
+    && mv "$state/status/$ZELLIJ_SESSION_NAME.tmp" "$state/status/$ZELLIJ_SESSION_NAME"
+}
+
+# Tell the user a session waits (attention) or finished (done), if they are not looking at
+# it: a message in the zjstatus bar when its tab is not the active one, and a desktop
+# notification when the terminal is not in front. CZW_NOTIFY=off turns both off;
+# CZW_NOTIFY=bar keeps only the bar. Runs in the background of `czw mark`.
+notify() {
+  local want="$1" name="$2" tab_id="$3" active title text
+  [[ "${CZW_NOTIFY:-auto}" == off ]] && return 0
+  active="$(timeout 3 zellij action list-tabs --json 2>/dev/null | python3 -c '
+import json, sys
+print(next((t["tab_id"] for t in json.load(sys.stdin) if t.get("active")), ""))' 2>/dev/null)"
+  if [[ "$want" == attention ]]; then title="● $name needs you"; text="A permission prompt or a question is waiting."
+  else title="✓ $name finished"; text="Your turn."; fi
+  if [[ "$active" != "$tab_id" ]]; then
+    timeout 2 zellij pipe "zjstatus::notify::$title" </dev/null >/dev/null 2>&1 || true
+  fi
+  [[ "${CZW_NOTIFY:-auto}" == bar ]] && return 0
+  if command -v powershell.exe >/dev/null; then
+    # On WSL: a Windows toast, only when Windows Terminal is not in front (in front, the
+    # bar already says it).
+    timeout 10 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(wslpath -w "$root/share/notify-windows.ps1")" \
+      -Title "$title" -Message "$text" -OnlyIfAway >/dev/null 2>&1 || true
+  elif command -v notify-send >/dev/null && [[ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]]; then
+    [[ "$active" != "$tab_id" ]] && timeout 5 notify-send -a czw "$title" "$text" >/dev/null 2>&1 || true
+  elif command -v osascript >/dev/null; then
+    [[ "$active" != "$tab_id" ]] && timeout 5 osascript -e "display notification \"$text\" with title \"$title\"" >/dev/null 2>&1 || true
+  fi
+}
+
+# Go to the next tab that needs you: after the current one, wrapping around, first a ●
+# (waiting), else a ✓ (your turn). Bound to Alt a.
+cmd_next() {
+  local id
+  id="$(timeout 3 zellij action list-tabs --json 2>/dev/null | python3 -c '
+import json, sys
+tabs = sorted(json.load(sys.stdin), key=lambda t: t["position"])
+cur = next((i for i, t in enumerate(tabs) if t.get("active")), 0)
+order = tabs[cur + 1:] + tabs[:cur + 1]
+for mark in ("● ", "✓ "):
+    hit = next((t for t in order if t["name"].startswith(mark)), None)
+    if hit:
+        print(hit["tab_id"]); break
+')" || return 0
+  [[ -n "$id" ]] && timeout 3 zellij action go-to-tab-by-id "$id" >/dev/null 2>&1 || true
+}
+
+# Which sessions need you. `czw status` lists the tabs with a marker; `--bar` prints the
+# short summary the status bar shows ("● 2  ✓ 1", or nothing when no one waits).
+cmd_status() {
+  local bar=0 session="${ZELLIJ_SESSION_NAME:-}"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --bar) bar=1 ;;
+      --zjstatus) bar=2 ;;
+      --session) session="${2:-}"; shift ;;
+      *) die "usage: czw status [--bar|--zjstatus] [--session NAME]" ;;
+    esac
+    shift
+  done
+  [[ -n "$session" ]] || die "not inside zellij: give --session NAME"
+  timeout 3 zellij --session "$session" action query-tab-names 2>/dev/null | python3 -c '
+import sys
+bar = sys.argv[1] in ("1", "2")
+styled = sys.argv[1] == "2"
+names = [l.rstrip("\n") for l in sys.stdin if l.strip()]
+need = [n[2:] for n in names if n.startswith("● ")]
+done = [n[2:] for n in names if n.startswith("✓ ")]
+busy = [n[2:] for n in names if n.startswith("… ")]
+if bar:
+    parts = []
+    if need: parts.append(("#[fg=#f38ba8,bg=#181825,bold]" if styled else "") + "● %d" % len(need))
+    if done: parts.append(("#[fg=#a6e3a1,bg=#181825,bold]" if styled else "") + "✓ %d" % len(done))
+    if busy: parts.append(("#[fg=#6c7086,bg=#181825]" if styled else "") + "… %d" % len(busy))
+    out = "  ".join(parts)
+    print(out + ("  " if styled and out else ""))
+else:
+    for label, group in (("needs you", need), ("your turn", done), ("working", busy)):
+        if group: print("%-10s %s" % (label, ", ".join(group)))
+    if not (need or done or busy): print("nothing waiting")
+' "$bar"
 }
 
 cmd_list() {
@@ -149,6 +250,9 @@ case "${1:-}" in
   new) shift; cmd_new "$@" ;;
   list) shift; cmd_list "$@" ;;
   mark) shift; cmd_mark "$@" ;;
+  status) shift; cmd_status "$@" ;;
+  next) shift; cmd_next ;;
+  statusline) exec python3 "$root/lib/statusline.py" ;;
   version|--version) echo "czw $CZW_VERSION" ;;
-  *) sed -n '2,11p' "$self" | sed 's/^# \{0,1\}//'; exit 1 ;;
+  *) sed -n '2,14p' "$self" | sed 's/^# \{0,1\}//'; exit 1 ;;
 esac

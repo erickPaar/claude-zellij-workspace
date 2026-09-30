@@ -1,0 +1,26 @@
+{
+  "schemes": [
+    {
+      "name": "Catppuccin Mocha (czw)",
+      "background": "#1E1E2E", "foreground": "#CDD6F4", "cursorColor": "#F5E0DC", "selectionBackground": "#585B70",
+      "black": "#45475A", "red": "#F38BA8", "green": "#A6E3A1", "yellow": "#F9E2AF",
+      "blue": "#89B4FA", "purple": "#F5C2E7", "cyan": "#94E2D5", "white": "#BAC2DE",
+      "brightBlack": "#585B70", "brightRed": "#F38BA8", "brightGreen": "#A6E3A1", "brightYellow": "#F9E2AF",
+      "brightBlue": "#89B4FA", "brightPurple": "#F5C2E7", "brightCyan": "#94E2D5", "brightWhite": "#A6ADC8"
+    }
+  ],
+  "profiles": [
+    {
+      "guid": "{3c1f5b2e-8d4a-4f6e-9b7c-2a1d0e9f8c01}",
+      "name": "Claude workspace",
+      "commandline": "wsl.exe -- bash -lic \"czw open ~/work\"",
+      "colorScheme": "Catppuccin Mocha (czw)",
+      "font": { "face": "JetBrainsMono Nerd Font Mono", "size": 11 },
+      "padding": "10, 8, 10, 4",
+      "cursorShape": "bar",
+      "scrollbarState": "hidden",
+      "suppressApplicationTitle": true,
+      "closeOnExit": "graceful"
+    }
+  ]
+}

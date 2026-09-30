@@ -10,8 +10,15 @@ default_mode "locked"
 theme "catppuccin-mocha"
 theme_dark "catppuccin-mocha"
 theme_light "catppuccin-latte"
-default_layout "compact"
+// New tabs: a shell with the same bar (czw writes layouts/czw.kdl).
+default_layout "czw"
 pane_frames false
+// When a tab is split, zjstatus turns frames on: rounded.
+ui {
+    pane_frames {
+        rounded_corners true
+    }
+}
 simplified_ui true
 show_startup_tips false
 show_release_notes false
@@ -51,6 +58,7 @@ keybinds clear-defaults=true {
         bind "w" { LaunchOrFocusPlugin "session-manager" { floating true; move_to_focused_tab true; }; SwitchToMode "Locked"; }
         bind "e" { EditScrollback; SwitchToMode "Locked"; }
         bind "d" { Detach; }
+        bind "a" { Run "czw" "next" { floating true; close_on_exit true; x "0"; y "0"; width "1"; height "1"; }; SwitchToMode "Locked"; }
         bind "f" { ToggleFocusFullscreen; SwitchToMode "Locked"; }
         bind "1" { GoToTab 1; SwitchToMode "Locked"; }
         bind "2" { GoToTab 2; SwitchToMode "Locked"; }
@@ -75,6 +83,10 @@ keybinds clear-defaults=true {
         bind "Alt 8" { GoToTab 8; }
         bind "Alt 9" { GoToTab 9; }
         bind "Alt 0" { GoToPreviousTab; }
+        // The next tab whose session needs you (● first, then ✓), via a 1x1 floating pane.
+        bind "Alt a" { Run "czw" "next" { floating true; close_on_exit true; x "0"; y "0"; width "1"; height "1"; }; }
+        bind "Alt h" { MoveFocusOrTab "Left"; }
+        bind "Alt l" { MoveFocusOrTab "Right"; }
     }
     resize {
         bind "Ctrl n" { SwitchToMode "Locked"; }

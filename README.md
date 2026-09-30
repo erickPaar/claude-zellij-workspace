@@ -25,11 +25,12 @@ and starts `claude` as a child, so zellij records a command that resumes the rig
 
 ## Install
 
-Needs zellij 0.41 or later, Claude Code, bash, Python 3.9+.
+Needs zellij 0.45 or later, Claude Code, bash, Python 3.9+.
 
 ```
 git clone https://github.com/erickPaar/claude-zellij-workspace
 cd claude-zellij-workspace && make install     # links ~/.local/bin/czw
+make plugins                                   # optional: the styled bar
 ```
 
 ## A workspace
@@ -70,6 +71,48 @@ Merge [`examples/claude-settings-hooks.json`](examples/claude-settings-hooks.jso
 `hooks` of `~/.claude/settings.json`. Each hook runs `czw mark STATE`, which renames only
 the tab of the pane the session runs in, takes about 70 ms, and does nothing outside zellij.
 
+## The look
+
+`make plugins` installs [zjstatus](https://github.com/dj95/zjstatus) (pinned, checksum
+verified) and every tab gets a Catppuccin Mocha bar; without it, zellij's compact bar.
+
+```
+ 🔒   work    1 api  2 ● web  3 ✓ review                     ● 1  ✓ 1    14:05
+```
+
+- the mode as a pill (orange in command mode), the active tab as a blue pill;
+- `● 1  ✓ 1`: how many sessions wait for you, and how many finished;
+- a message in the bar when a session in another tab needs you or finishes;
+- pane frames, rounded, only when a tab is split.
+
+It needs a [Nerd Font](https://www.nerdfonts.com) in the terminal; the "Mono" variant keeps
+every icon one cell wide. czw grants the bar's zellij permissions itself, since the prompt
+would sit unseen in the one-line bar.
+
+When the terminal is not in front, a waiting or finished session also raises a desktop
+notification: a Windows toast from WSL (Windows Terminal's, so a click brings it back),
+`notify-send` on Linux, `osascript` on macOS. `CZW_NOTIFY=bar` keeps only the bar,
+`CZW_NOTIFY=off` neither.
+
+On Windows Terminal, [`examples/windows-terminal-fragment.json`](examples/windows-terminal-fragment.json)
+is a profile with the same colors and font: save it as
+`%LOCALAPPDATA%\Microsoft\Windows Terminal\Fragments\czw\czw.json` and restart the terminal.
+
+## The status line
+
+`czw statusline` is a Claude Code status line in the same palette:
+
+```
+ api   my-api   feat/login ✚3   #42 approved   Opus 5.5   ▰▰▰▱▱ 63%
+```
+
+session name, project, git branch and uncommitted files, the pull request and its review,
+the model, and how full the context is (green, yellow, red). In `~/.claude/settings.json`:
+
+```json
+"statusLine": { "type": "command", "command": "\"$HOME/.local/bin/czw\" statusline", "padding": 0 }
+```
+
 ## Commands
 
 | Command | What it does |
@@ -81,6 +124,9 @@ the tab of the pane the session runs in, takes about 70 ms, and does nothing out
 | `czw claude NAME` | run session NAME: resume it, or start it with that name the first time |
 | `czw list [DIR]` | the sessions a workspace opens |
 | `czw mark STATE` | from a hook: `working`, `done`, `attention`, `unblock` (attention back to working) or `clear` |
+| `czw status` | which sessions need you, finished, or work |
+| `czw next` | go to the next tab that needs you (`Alt a`) |
+| `czw statusline` | Claude Code's status line |
 
 A small script per workspace makes it one word: `exec czw open ~/work "$@"`.
 
@@ -89,6 +135,8 @@ A small script per workspace makes it one word: `exec czw open ~/work "$@"`.
 | Keys | What it does |
 |---|---|
 | `Alt 1`…`Alt 9`, `Alt 0` | tab 1 to 9; the previous tab |
+| `Alt a` | the next tab that needs you (● first, then ✓) |
+| `Alt h` / `Alt l` | the pane to the left / right, or the next tab past the edge |
 | `Alt g` | command mode: one of the keys below, then back to locked |
 | `Alt g`, `s` / `/` | scroll / search this tab's history |
 | `Alt g`, `e` | open the history in `$EDITOR` |
