@@ -6,6 +6,7 @@
 #   czw new NAME [FOLDER] [TAB]    from inside a workspace: a new named session in a new tab
 #   czw claude NAME [ARGS...]      run session NAME (resume it, or start it with that name)
 #   czw list [DIR]                 the sessions a workspace opens
+#   czw mark STATE                 from Claude Code hooks: show the session's state in its tab
 #   czw version
 set -euo pipefail
 
@@ -103,6 +104,38 @@ cmd_new() {
     "layout { pane command=\"czw\" name=\"$name\" { args \"claude\" \"$name\"; }; pane size=1 borderless=true { plugin location=\"zellij:compact-bar\"; }; }"
 }
 
+# Show a Claude session's state in its tab name, from Claude Code hooks:
+#   working "… name", done "✓ name" (your turn), attention "● name" (a permission
+#   prompt or a question waits), clear "name". `unblock` only turns attention back
+#   into working (after a tool ran, the prompt was answered). Outside zellij: no-op.
+cmd_mark() {
+  local state="${1:-}" marker="" pane tab_id tab_name base new
+  [[ -n "${ZELLIJ_PANE_ID:-}" && -n "${ZELLIJ_SESSION_NAME:-}" ]] || return 0
+  case "$state" in
+    working) marker="… " ;;
+    done) marker="✓ " ;;
+    attention) marker="● " ;;
+    clear|unblock) marker="" ;;
+    *) die "usage: czw mark working|done|attention|unblock|clear" ;;
+  esac
+  pane="$ZELLIJ_PANE_ID"
+  read -r tab_id tab_name < <(zellij action list-panes --tab --json 2>/dev/null | python3 -c '
+import json, sys
+for p in json.load(sys.stdin):
+    if not p.get("is_plugin") and str(p.get("id")) == sys.argv[1]:
+        print(p["tab_id"], p["tab_name"]); break
+' "$pane") || return 0
+  [[ -n "${tab_id:-}" ]] || return 0
+  base="$tab_name"
+  for m in "… " "✓ " "● "; do base="${base#"$m"}"; done
+  if [[ "$state" == unblock ]]; then
+    [[ "$tab_name" == "● "* ]] || return 0
+    marker="… "
+  fi
+  new="$marker$base"
+  [[ "$new" == "$tab_name" ]] || zellij action rename-tab-by-id "$tab_id" "$new" >/dev/null 2>&1 || true
+}
+
 cmd_list() {
   local dir="${1:-}"
   if [[ -z "$dir" && -n "${ZELLIJ_SESSION_NAME:-}" ]]; then dir="$(cat "$state/workspaces/$ZELLIJ_SESSION_NAME" 2>/dev/null || true)"; fi
@@ -115,6 +148,7 @@ case "${1:-}" in
   claude) shift; cmd_claude "$@" ;;
   new) shift; cmd_new "$@" ;;
   list) shift; cmd_list "$@" ;;
+  mark) shift; cmd_mark "$@" ;;
   version|--version) echo "czw $CZW_VERSION" ;;
-  *) sed -n '2,10p' "$self" | sed 's/^# \{0,1\}//'; exit 1 ;;
+  *) sed -n '2,11p' "$self" | sed 's/^# \{0,1\}//'; exit 1 ;;
 esac

@@ -1,0 +1,9 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "\"$HOME/.local/bin/czw\" mark working 2>/dev/null || true", "timeout": 5 }] }],
+    "Stop": [{ "hooks": [{ "type": "command", "command": "\"$HOME/.local/bin/czw\" mark done 2>/dev/null || true", "timeout": 5 }] }],
+    "Notification": [{ "hooks": [{ "type": "command", "command": "\"$HOME/.local/bin/czw\" mark attention 2>/dev/null || true", "timeout": 5 }] }],
+    "PostToolUse": [{ "matcher": "*", "hooks": [{ "type": "command", "command": "\"$HOME/.local/bin/czw\" mark unblock 2>/dev/null || true", "timeout": 5, "async": true }] }],
+    "SessionStart": [{ "hooks": [{ "type": "command", "command": "\"$HOME/.local/bin/czw\" mark clear 2>/dev/null || true", "timeout": 5 }] }]
+  }
+}

@@ -55,6 +55,21 @@ strip_prefix = my-        # tab names drop this prefix (optional)
 becomes the workspace folder, so it can run scripts kept beside it (a dev server, a log),
 and `${HOME}` the home folder.
 
+## Which session needs you
+
+With a few Claude Code hooks, each tab's name shows its session's state:
+
+| Tab | Means |
+|---|---|
+| `… api` | working |
+| `✓ api` | finished: your turn |
+| `● api` | waiting for you: a permission prompt or a question |
+| `api` | idle since it started |
+
+Merge [`examples/claude-settings-hooks.json`](examples/claude-settings-hooks.json) into the
+`hooks` of `~/.claude/settings.json`. Each hook runs `czw mark STATE`, which renames only
+the tab of the pane the session runs in, takes about 70 ms, and does nothing outside zellij.
+
 ## Commands
 
 | Command | What it does |
@@ -65,6 +80,7 @@ and `${HOME}` the home folder.
 | `czw new NAME [FOLDER] [TAB]` | inside a workspace: a new named session in a new tab, added to `sessions.txt` |
 | `czw claude NAME` | run session NAME: resume it, or start it with that name the first time |
 | `czw list [DIR]` | the sessions a workspace opens |
+| `czw mark STATE` | from a hook: `working`, `done`, `attention`, `unblock` (attention back to working) or `clear` |
 
 A small script per workspace makes it one word: `exec czw open ~/work "$@"`.
 
