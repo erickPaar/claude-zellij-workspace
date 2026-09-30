@@ -1,0 +1,120 @@
+#!/usr/bin/env bash
+# czw: Claude Code sessions as tabs of one zellij session, that survive closing the
+# terminal and rebooting the machine.
+#
+#   czw open DIR [--all|--fresh]   open (or reattach to) the workspace described in DIR
+#   czw new NAME [FOLDER] [TAB]    from inside a workspace: a new named session in a new tab
+#   czw claude NAME [ARGS...]      run session NAME (resume it, or start it with that name)
+#   czw list [DIR]                 the sessions a workspace opens
+#   czw version
+set -euo pipefail
+
+CZW_VERSION="0.1.0"
+self="$(readlink -f "${BASH_SOURCE[0]}")"
+root="$(cd "$(dirname "$self")/.." && pwd)"
+state="${XDG_STATE_HOME:-$HOME/.local/state}/czw"
+cache="${XDG_CACHE_HOME:-$HOME/.cache}/czw"
+
+die() { echo "czw: $*" >&2; exit 1; }
+need() { command -v "$1" >/dev/null || die "$1 is not installed ($2)"; }
+
+# A workspace is a folder with sessions.txt, and optionally workspace.conf and tabs.kdl.
+ws_name() {
+  local dir="$1" name=""
+  [[ -f "$dir/workspace.conf" ]] && name="$(sed -n 's/[[:space:]]*#.*//; s/^name[[:space:]]*=[[:space:]]*//p' "$dir/workspace.conf" | tail -1)"
+  echo "${name:-$(basename "$dir")}"
+}
+
+# The zellij config folder czw runs with: the user's own config is never touched.
+# (--config-dir, not --config: with --config, the file's default_layout would win over
+# --new-session-with-layout.)
+config_dir() {
+  mkdir -p "$cache/zellij"
+  sed "s#@CZW_ROOT@#$root#g" "$root/share/config.kdl" > "$cache/zellij/config.kdl"
+  echo "$cache/zellij"
+}
+
+exists() { zellij list-sessions -n -s 2>/dev/null | grep -qx "$1"; }
+
+cmd_open() {
+  local dir="" mode=""
+  for a in "$@"; do
+    case "$a" in
+      --all|--fresh) mode="$a" ;;
+      -*) die "unknown option $a" ;;
+      *) dir="$a" ;;
+    esac
+  done
+  [[ -n "$dir" ]] || die "usage: czw open DIR [--all|--fresh]"
+  dir="$(cd "$dir" && pwd)"
+  [[ -f "$dir/sessions.txt" ]] || die "$dir has no sessions.txt"
+  [[ -z "${ZELLIJ:-}" ]] || die "already inside zellij: detach first (Alt g, d)"
+  need zellij "https://zellij.dev"
+  local name layout cfg
+  name="$(ws_name "$dir")"
+  layout="$cache/layouts/$name.kdl"
+  cfg="$(config_dir)"
+  mkdir -p "$state/workspaces" && echo "$dir" > "$state/workspaces/$name"
+  python3 "$root/lib/layout.py" "$dir" "$layout"
+  if [[ "$mode" == --fresh ]] && exists "$name"; then
+    read -r -p "This closes the zellij session $name and reopens every tab. Continue? [y/N] " ok
+    [[ "$ok" == [yY] ]] || exit 1
+    zellij delete-session --force "$name" >/dev/null
+  fi
+  if exists "$name"; then
+    if [[ "$mode" == --all ]]; then
+      exec zellij --config-dir "$cfg" attach "$name" --force-run-commands
+    fi
+    exec zellij --config-dir "$cfg" attach "$name"
+  fi
+  exec zellij --config-dir "$cfg" --session "$name" --new-session-with-layout "$layout"
+}
+
+cmd_claude() {
+  local name="${1:?usage: czw claude NAME [ARGS...]}"
+  shift
+  need claude "https://claude.com/claude-code"
+  mkdir -p "$state/known"
+  # claude runs as a child, not exec'd: zellij records THIS command line for
+  # resurrection, and a running claude hides its own arguments.
+  if [[ -e "$state/known/$name" ]]; then
+    claude --resume "$name" "$@"
+  else
+    echo "New session: $name"
+    touch "$state/known/$name"
+    claude -n "$name" "$@"
+  fi
+}
+
+cmd_new() {
+  local name="${1:?usage: czw new NAME [FOLDER] [TAB]}"
+  local folder tab dir
+  folder="$(cd "${2:-$PWD}" && pwd)"
+  [[ -n "${ZELLIJ_SESSION_NAME:-}" ]] || die "run it inside a czw workspace"
+  dir="$(cat "$state/workspaces/$ZELLIJ_SESSION_NAME" 2>/dev/null)" || die "$ZELLIJ_SESSION_NAME is not a czw workspace"
+  local prefix=""
+  [[ -f "$dir/workspace.conf" ]] && prefix="$(sed -n 's/[[:space:]]*#.*//; s/^strip_prefix[[:space:]]*=[[:space:]]*//p' "$dir/workspace.conf" | tail -1)"
+  tab="${3:-${name#"$prefix"}}"
+  if ! grep -qE "^$name[[:space:]]" "$dir/sessions.txt"; then
+    printf '%-24s %s%s\n' "$name" "${folder/#$HOME/\~}" "$([[ -n "${3:-}" ]] && echo " $tab")" >>"$dir/sessions.txt"
+    echo "sessions.txt: + $name"
+  fi
+  zellij action new-tab --name "$tab" --cwd "$folder" --layout-string \
+    "layout { pane command=\"czw\" name=\"$name\" { args \"claude\" \"$name\"; }; pane size=1 borderless=true { plugin location=\"zellij:compact-bar\"; }; }"
+}
+
+cmd_list() {
+  local dir="${1:-}"
+  if [[ -z "$dir" && -n "${ZELLIJ_SESSION_NAME:-}" ]]; then dir="$(cat "$state/workspaces/$ZELLIJ_SESSION_NAME" 2>/dev/null || true)"; fi
+  [[ -n "$dir" ]] || die "usage: czw list DIR"
+  grep -vE '^[[:space:]]*(#|$)' "$dir/sessions.txt"
+}
+
+case "${1:-}" in
+  open) shift; cmd_open "$@" ;;
+  claude) shift; cmd_claude "$@" ;;
+  new) shift; cmd_new "$@" ;;
+  list) shift; cmd_list "$@" ;;
+  version|--version) echo "czw $CZW_VERSION" ;;
+  *) sed -n '2,10p' "$self" | sed 's/^# \{0,1\}//'; exit 1 ;;
+esac

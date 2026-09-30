@@ -1,0 +1,4 @@
+// Extra tabs after the Claude ones, as zellij layout KDL. ${WORKSPACE} is this folder.
+tab name="shell" cwd="${HOME}/code" {
+    pane
+}

@@ -1,0 +1,5 @@
+# One Claude Code session per line: NAME [FOLDER] [TAB]
+# czw resumes each by name, or starts it with that name the first time.
+api          ~/code/my-api
+web          ~/code/my-web
+review       ~/code/my-api      pr-review
