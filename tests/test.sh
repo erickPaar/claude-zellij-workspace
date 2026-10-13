@@ -48,7 +48,8 @@ if ! command -v zellij >/dev/null || ! command -v script >/dev/null; then
   echo "skip end-to-end (needs zellij and script)"; exit $((fails > 0))
 fi
 mkdir -p "$tmp/bin" "$tmp/state"
-printf '#!/usr/bin/env bash\necho "fake claude $*" >> "%s/calls"\nexec sleep 600\n' "$tmp" > "$tmp/bin/claude"
+# shellcheck disable=SC2016 # expanded by the fake claude when it runs, not here
+printf '#!/usr/bin/env bash\necho "fake claude $* (CZW_SESSION=${CZW_SESSION:-})" >> "%s/calls"\nexec sleep 600\n' "$tmp" > "$tmp/bin/claude"
 ln -s "$root/bin/czw" "$tmp/bin/czw"
 chmod +x "$tmp/bin/claude"
 mkdir -p "$tmp/state/czw/known" && touch "$tmp/state/czw/known/proj-alpha"
@@ -83,6 +84,8 @@ zellij --session czw-test action go-to-tab 1
 wait_for "[[ \$(grep -c . $tmp/calls 2>/dev/null) -ge 2 ]]" 10 && ok "both sessions ran" || ko "sessions did not run"
 grep -q 'fake claude --resume proj-alpha' "$tmp/calls" && ok "known session resumed by name" || ko "alpha not resumed"
 grep -q 'fake claude -n proj-beta' "$tmp/calls" && ok "new session started with its name" || ko "beta not created"
+grep -q 'fake claude --resume proj-alpha (CZW_SESSION=proj-alpha)' "$tmp/calls" && ok "a resumed session gets CZW_SESSION" || ko "alpha without CZW_SESSION"
+grep -q 'fake claude -n proj-beta (CZW_SESSION=proj-beta)' "$tmp/calls" && ok "a new session gets CZW_SESSION" || ko "beta without CZW_SESSION"
 wait_for "grep -qs czw $HOME/.cache/zellij/*/session_info/czw-test/session-layout.kdl" 10 && ok "layout saved for resurrection" || ko "nothing saved"
 saved="$(ls -d "$HOME/.cache"/zellij/*/session_info/czw-test | head -1)"
 grep -q '"claude" "proj-alpha"' "$saved/session-layout.kdl" && ok "saved command keeps the session name" || ko "saved command lost the name"

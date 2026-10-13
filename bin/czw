@@ -92,6 +92,9 @@ cmd_claude() {
   shift
   need claude "https://claude.com/claude-code"
   mkdir -p "$state/known"
+  # The session's name, for what runs inside it (hooks, plugins): Claude Code doesn't pass its
+  # name to every plugin.
+  export CZW_SESSION="$name"
   # claude runs as a child, not exec'd: zellij records THIS command line for
   # resurrection, and a running claude hides its own arguments.
   if [[ -e "$state/known/$name" ]]; then
