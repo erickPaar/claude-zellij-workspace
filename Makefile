@@ -23,11 +23,12 @@ plugins:
 uninstall:
 	rm -f $(PREFIX)/bin/czw
 
-# Static checks, then the tests (the end-to-end one needs zellij).
+# Static checks, then the tests (the end-to-end one needs zellij). shellcheck stops at
+# warnings: its notes on the tests' `A && ok || ko` lines are style, not faults.
 check:
 	bash -n bin/czw share/resurrect-hook.sh tests/test.sh
 	python3 -m py_compile lib/layout.py lib/statusline.py
-	@if command -v shellcheck >/dev/null; then shellcheck bin/czw share/resurrect-hook.sh tests/test.sh; else echo "shellcheck not installed: skipped"; fi
+	@if command -v shellcheck >/dev/null; then shellcheck -S warning bin/czw share/resurrect-hook.sh tests/test.sh; else echo "shellcheck not installed: skipped"; fi
 
 test: check
 	./tests/test.sh

@@ -112,7 +112,7 @@ cmd_new() {
   local prefix=""
   [[ -f "$dir/workspace.conf" ]] && prefix="$(sed -n 's/[[:space:]]*#.*//; s/^strip_prefix[[:space:]]*=[[:space:]]*//p' "$dir/workspace.conf" | tail -1)"
   tab="${3:-${name#"$prefix"}}"
-  if ! grep -qE "^$name[[:space:]]" "$dir/sessions.txt"; then
+  if ! grep -qE "^${name}[[:space:]]" "$dir/sessions.txt"; then
     printf '%-24s %s%s\n' "$name" "${folder/#$HOME/\~}" "$([[ -n "${3:-}" ]] && echo " $tab")" >>"$dir/sessions.txt"
     echo "sessions.txt: + $name"
   fi
@@ -151,7 +151,7 @@ for p in json.load(sys.stdin):
   fi
   new="$marker$base"
   [[ "$new" == "$tab_name" ]] || timeout 3 zellij action rename-tab-by-id "$tab_id" "$new" >/dev/null 2>&1 || true
-  [[ "$want" == attention || "$want" == done ]] && [[ "$new" != "$tab_name" ]] && ( notify "$want" "$base" "$tab_id" & )
+  [[ "$want" == attention || "$want" == "done" ]] && [[ "$new" != "$tab_name" ]] && ( notify "$want" "$base" "$tab_id" & )
   # The bar reads this file instead of asking zellij: written only when a mark changes.
   mkdir -p "$state/status"
   cmd_status --zjstatus --session "$ZELLIJ_SESSION_NAME" > "$state/status/$ZELLIJ_SESSION_NAME.tmp" 2>/dev/null \
