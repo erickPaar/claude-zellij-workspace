@@ -27,6 +27,31 @@ sl="$(printf '%s' '{"session_name":"api","workspace":{"current_dir":"/tmp"},"mod
 [[ -n "$(echo '{}' | "$root/bin/czw" statusline)" ]] && ok "statusline: empty input" || ko "statusline: empty input"
 [[ -n "$(echo 'not json' | "$root/bin/czw" statusline 2>&1)" ]] && ok "statusline: bad input" || ko "statusline: bad input"
 
+# 1c. czw status, from the tab names of a fake zellij (a file, or a session that is gone).
+mkdir -p "$tmp/fake"
+printf '#!/usr/bin/env bash\n[[ -f "%s/tabs" ]] && cat "%s/tabs"\n' "$tmp" "$tmp" > "$tmp/fake/zellij"
+chmod +x "$tmp/fake/zellij"
+status() { PATH="$tmp/fake:$PATH" "$root/bin/czw" status "$@" --session fake; }
+printf '● a\n✓ b\n c\n… d\n○ e\nf\n● g\n' > "$tmp/tabs"
+want="$(printf '## Sessions\n● needs you  a, g\n✓ your turn  b\n⠋ working    c, d')"
+[[ "$(status --panel)" == "$want" ]] && ok "status --panel: a line per state, idle and plain tabs left out" || ko "status --panel: '$(status --panel)'"
+printf '✓ b\n' > "$tmp/tabs"
+[[ "$(status --panel)" == "$(printf '## Sessions\n✓ your turn  b')" ]] && ok "status --panel: only the states present" || ko "status --panel one state: '$(status --panel)'"
+printf ' c\n' > "$tmp/tabs"
+[[ "$(status --panel)" == "$(printf '## Sessions\n⠋ working    c')" ]] && ok "status --panel: working alone" || ko "status --panel working: '$(status --panel)'"
+printf '○ e\nf\n' > "$tmp/tabs"
+[[ "$(status --panel)" == "$(printf '## Sessions\nnothing waiting')" ]] && ok "status --panel: tabs, none waiting" || ko "status --panel idle: '$(status --panel)'"
+rm "$tmp/tabs"
+got="$(status --panel)" && [[ "$got" == "$(printf '## Sessions\nno sessions')" ]] && ok "status --panel: a session that is gone is no sessions, exit 0" || ko "status --panel gone: '$got'"
+got="$(unset ZELLIJ_SESSION_NAME; "$root/bin/czw" status --panel)" && [[ "$got" == "$(printf '## Sessions\nno sessions')" ]] && ok "status --panel: outside zellij, no sessions, exit 0" || ko "status --panel outside zellij: '$got'"
+(unset ZELLIJ_SESSION_NAME; "$root/bin/czw" status >/dev/null 2>&1) && ko "status: outside zellij should still fail" || ok "status: outside zellij still asks for --session"
+printf '● a\n✓ b\n c\n… d\n○ e\nf\n● g\n' > "$tmp/tabs"
+[[ "$(status)" == "$(printf 'needs you  a, g\nyour turn  b\nworking    c, d')" ]] && ok "status: unchanged" || ko "status: '$(status)'"
+[[ "$(status --bar)" == "● 2  ✓ 1   2" ]] && ok "status --bar: unchanged" || ko "status --bar: '$(status --bar)'"
+[[ "$(status --zjstatus)" == "#[fg=#f38ba8,bg=#181825,bold]● 2  #[fg=#a6e3a1,bg=#181825,bold]✓ 1  #[fg=#89b4fa,bg=#181825] 2  " ]] && ok "status --zjstatus: unchanged" || ko "status --zjstatus: '$(status --zjstatus)'"
+: > "$tmp/tabs"
+[[ "$(status)" == "nothing waiting" ]] && ok "status: nothing waiting, unchanged" || ko "status empty: '$(status)'"
+
 # 2. The layout: one tab per session, run through czw, then tabs.kdl.
 ws="$tmp/ws"; mkdir -p "$ws/sub"
 cat > "$ws/sessions.txt" <<TXT
