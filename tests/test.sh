@@ -97,6 +97,7 @@ sleep 2
 [[ ! -s "$tmp/calls" ]] && ok "resurrected commands wait for Enter" || ko "commands ran without Enter"
 zellij --session czw-test action write 13
 wait_for "grep -q 'fake claude --resume proj-alpha' $tmp/calls" && ok "Enter resumes the same session" || ko "Enter did not resume alpha"
+grep -q 'fake claude --resume proj-alpha (CZW_SESSION=proj-alpha)' "$tmp/calls" && ok "the resumed session gets CZW_SESSION again" || ko "resurrected alpha without CZW_SESSION"
 
 [[ $fails -eq 0 ]] && echo "all passed" || echo "$fails failed"
 exit $((fails > 0))
