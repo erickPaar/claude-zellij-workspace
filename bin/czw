@@ -213,7 +213,7 @@ cmd_status() {
       --bar) mode=1 ;;
       --zjstatus) mode=2 ;;
       --panel) mode=3 ;;
-      --session) session="${2:-}"; shift ;;
+      --session) session="${2:-}"; shift $(( $# > 1 ? 1 : 0 )) ;;
       *) die "usage: czw status [--bar|--zjstatus|--panel] [--session NAME]" ;;
     esac
     shift

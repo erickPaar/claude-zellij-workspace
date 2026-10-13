@@ -29,7 +29,8 @@ sl="$(printf '%s' '{"session_name":"api","workspace":{"current_dir":"/tmp"},"mod
 
 # 1c. czw status, from the tab names of a fake zellij (a file, or a session that is gone).
 mkdir -p "$tmp/fake"
-printf '#!/usr/bin/env bash\n[[ -f "%s/tabs" ]] && cat "%s/tabs"\n' "$tmp" "$tmp" > "$tmp/fake/zellij"
+# shellcheck disable=SC2016 # the fake's own arguments, expanded when it runs
+printf '#!/usr/bin/env bash\n[[ "$1 $2 $3 $4" == "--session fake action query-tab-names" && -f "%s/tabs" ]] && cat "%s/tabs"\n' "$tmp" "$tmp" > "$tmp/fake/zellij"
 chmod +x "$tmp/fake/zellij"
 status() { PATH="$tmp/fake:$PATH" "$root/bin/czw" status "$@" --session fake; }
 printf '● a\n✓ b\n c\n… d\n○ e\nf\n● g\n' > "$tmp/tabs"
@@ -43,9 +44,16 @@ printf '○ e\nf\n' > "$tmp/tabs"
 [[ "$(status --panel)" == "$(printf '## Sessions\nnothing waiting')" ]] && ok "status --panel: tabs, none waiting" || ko "status --panel idle: '$(status --panel)'"
 rm "$tmp/tabs"
 got="$(status --panel)" && [[ "$got" == "$(printf '## Sessions\nno sessions')" ]] && ok "status --panel: a session that is gone is no sessions, exit 0" || ko "status --panel gone: '$got'"
+! status >/dev/null && ok "status: a session that is gone still fails" || ko "status: a gone session exits 0"
+! status --bar >/dev/null && ok "status --bar: a session that is gone still fails" || ko "status --bar: a gone session exits 0"
+for args in '--session ""' '--session'; do
+  got="$(unset ZELLIJ_SESSION_NAME; eval "\"$root/bin/czw\" status --panel $args")" && [[ "$got" == "$(printf '## Sessions\nno sessions')" ]] && ok "status --panel $args: no sessions, exit 0" || ko "status --panel $args: '$got'"
+done
 got="$(unset ZELLIJ_SESSION_NAME; "$root/bin/czw" status --panel)" && [[ "$got" == "$(printf '## Sessions\nno sessions')" ]] && ok "status --panel: outside zellij, no sessions, exit 0" || ko "status --panel outside zellij: '$got'"
 (unset ZELLIJ_SESSION_NAME; "$root/bin/czw" status >/dev/null 2>&1) && ko "status: outside zellij should still fail" || ok "status: outside zellij still asks for --session"
 printf '● a\n✓ b\n c\n… d\n○ e\nf\n● g\n' > "$tmp/tabs"
+got="$(PATH="$tmp/fake:$PATH" ZELLIJ_SESSION_NAME=fake "$root/bin/czw" status --panel)"
+[[ "$got" == "$(printf '## Sessions\n● needs you  a, g\n✓ your turn  b\n⠋ working    c, d')" ]] && ok "status --panel: the session from ZELLIJ_SESSION_NAME" || ko "status --panel from the environment: '$got'"
 [[ "$(status)" == "$(printf 'needs you  a, g\nyour turn  b\nworking    c, d')" ]] && ok "status: unchanged" || ko "status: '$(status)'"
 [[ "$(status --bar)" == "● 2  ✓ 1   2" ]] && ok "status --bar: unchanged" || ko "status --bar: '$(status --bar)'"
 [[ "$(status --zjstatus)" == "#[fg=#f38ba8,bg=#181825,bold]● 2  #[fg=#a6e3a1,bg=#181825,bold]✓ 1  #[fg=#89b4fa,bg=#181825] 2  " ]] && ok "status --zjstatus: unchanged" || ko "status --zjstatus: '$(status --zjstatus)'"
@@ -60,6 +68,7 @@ proj-alpha
 proj-beta   $ws/sub   b
 TXT
 printf 'folder = %s   # a trailing comment\nstrip_prefix = proj-\nname = czw-test\n' "$ws" > "$ws/workspace.conf"
+# shellcheck disable=SC2016 # the layout's own ${HOME} and ${WORKSPACE}, for layout.py
 printf 'tab name="extra" cwd="${HOME}" {\n    pane command="bash" { args "${WORKSPACE}/x.sh"; }\n}\n' > "$ws/tabs.kdl"
 python3 "$root/lib/layout.py" "$ws" "$tmp/layout.kdl" && ok "layout written" || ko "layout.py failed"
 grep -q 'tab name="alpha" cwd="'"$ws"'" focus=true' "$tmp/layout.kdl" && ok "layout: prefix stripped, default folder" || ko "layout: first tab"
@@ -109,6 +118,7 @@ wait_for "[[ \$(grep -c . $tmp/calls 2>/dev/null) -ge 2 ]]" 10 && ok "both sessi
 grep -q 'fake claude --resume proj-alpha' "$tmp/calls" && ok "known session resumed by name" || ko "alpha not resumed"
 grep -q 'fake claude -n proj-beta' "$tmp/calls" && ok "new session started with its name" || ko "beta not created"
 wait_for "grep -qs czw $HOME/.cache/zellij/*/session_info/czw-test/session-layout.kdl" 10 && ok "layout saved for resurrection" || ko "nothing saved"
+# shellcheck disable=SC2012 # zellij's cache folder names are its own, plain
 saved="$(ls -d "$HOME/.cache"/zellij/*/session_info/czw-test | head -1)"
 grep -q '"claude" "proj-alpha"' "$saved/session-layout.kdl" && ok "saved command keeps the session name" || ko "saved command lost the name"
 pkill -9 -f 'zellij --server .*czw-test'; pkill -f '^sleep 600$'; : > "$tmp/calls"

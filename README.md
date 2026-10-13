@@ -126,7 +126,7 @@ heading, then one line per state, starting with the marker a panel colors by.
 ```
 
 It prints `no sessions` when the zellij session has no tabs or is not found (or, outside
-zellij, when no `--session NAME` is given), and `nothing waiting` when every tab is idle.
+zellij, when no `--session NAME` is given), and `nothing waiting` when no tab needs you, is your turn or is working.
 To use it as a panel's sections command, give it the session from the environment:
 
 ```
