@@ -96,6 +96,52 @@ rm -rf "$tmp/state-bell"
 BELL_PATH="$tmp/failppid:$tmp/fakemark:$nomnt" bell attention >/dev/null
 [[ -s "$tmp/state-bell/czw/status/fake" ]] && ok "a ps failing on the parent still lets the mark write the bar's status" || ko "a ps failing on the parent aborted the mark"
 
+# 1e. czw shell, from the panes of a fake zellij (tab 1 active): each state gives its calls.
+mkdir -p "$tmp/fake-shell"
+cat > "$tmp/fake-shell/zellij" <<SH
+#!/usr/bin/env bash
+case "\$2" in
+  list-tabs) echo '[{"tab_id": 0, "active": false}, {"tab_id": 1, "active": true}]' ;;
+  list-panes) cat "$tmp/panes.json" ;;
+  *) echo "\${*:2}" >> "$tmp/shell-calls" ;;
+esac
+SH
+chmod +x "$tmp/fake-shell/zellij"
+# Each pane: "ID|TAB|TITLE|COMMAND[|FLAG...]", COMMAND - for none; FLAG fs, exited, plugin,
+# floating, nocwd, or proc (COMMAND is the running process's, not zellij's).
+shell_case() {
+  local label="$1" want="$2" got; shift 2
+  python3 -c '
+import json, sys
+out = []
+for spec in sys.argv[1:]:
+    f = spec.split("|")
+    cmd = None if f[3] == "-" else f[3]
+    out.append({"id": int(f[0]), "tab_id": int(f[1]), "title": f[2], **({"pane_command": cmd} if "proc" in f[4:] else {"terminal_command": cmd}),
+                "is_fullscreen": "fs" in f[4:], "exited": "exited" in f[4:], "is_plugin": "plugin" in f[4:],
+                "is_floating": "floating" in f[4:], **({} if "nocwd" in f[4:] else {"pane_cwd": "/w/p"})})
+print(json.dumps(out))' "$@" > "$tmp/panes.json"
+  : > "$tmp/shell-calls"
+  (cd "$tmp" && PATH="$tmp/fake-shell:$PATH" "$root/bin/czw" shell) || { ko "shell: $label: czw shell failed"; return; }
+  got="$(tr '\n' ';' < "$tmp/shell-calls")"
+  [[ "$got" == "$want" ]] && ok "shell: $label" || ko "shell: $label: '$got', not '$want'"
+}
+session="0|1|✳ Claude Code|czw claude alpha"
+noise=("4|1|shell|-|plugin" "9|1|shell|-|floating" "5|0|shell|-")
+shell_case "no shell: one opens right of the session, in its folder" \
+  "focus-pane-id terminal_0;new-pane --direction right --name shell --cwd /w/p;" "$session" "${noise[@]}"
+shell_case "a shell showing: the session goes full screen" \
+  "focus-pane-id terminal_0;toggle-fullscreen;" "$session" "3|1|shell|-" "${noise[@]}"
+shell_case "the session full screen: back to the split, the shell focused" \
+  "focus-pane-id terminal_0;toggle-fullscreen;focus-pane-id terminal_3;" "$session|fs" "3|1|shell|-" "${noise[@]}"
+shell_case "an exited shell counts as none and is replaced" \
+  "close-pane --pane-id terminal_3;focus-pane-id terminal_0;new-pane --direction right --name shell --cwd /w/p;" "$session" "3|1|shell|-|exited"
+shell_case "a tab with no session pane: nothing" "" "2|1|bash|-" "3|1|shell|-"
+shell_case "a session known by its process only, as after a resurrection" \
+  "focus-pane-id terminal_0;toggle-fullscreen;" "0|1|claude|bash /x/czw claude alpha|proc" "3|1|shell|-"
+shell_case "no folder known: the current one" \
+  "focus-pane-id terminal_0;new-pane --direction right --name shell --cwd $tmp;" "$session|nocwd"
+
 # 2. The layout: one tab per session, run through czw, then tabs.kdl.
 ws="$tmp/ws"; mkdir -p "$ws/sub"
 cat > "$ws/sessions.txt" <<TXT
@@ -128,6 +174,7 @@ cfg="$tmp/zellij"; mkdir -p "$cfg"
 sed "s#@CZW_ROOT@#$root#g" "$root/share/config.kdl" | sed 's/^serialization_interval 30/serialization_interval 2/' > "$cfg/config.kdl"
 python3 "$root/lib/layout.py" --default "$cfg/layouts/czw.kdl" czw-test
 grep -q 'Run "czw" "next"' "$cfg/config.kdl" && ok "config: Alt a runs czw next" || ko "config: no Alt a"
+grep -q 'bind "Alt n" { Run "czw" "shell"' "$cfg/config.kdl" && grep -q 'bind "n" { Run "czw" "shell"' "$cfg/config.kdl" && ok "config: Alt n and Alt g, n run czw shell" || ko "config: no Alt n or Alt g, n"
 env_run() { PATH="$tmp/bin:$PATH" XDG_STATE_HOME="$tmp/state" "$@"; }
 python3 "$root/lib/layout.py" "$ws" "$tmp/layout.kdl"
 # A czw-test left by a run that just ended may still be shutting down: wait until it is gone.

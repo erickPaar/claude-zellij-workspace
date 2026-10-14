@@ -9,6 +9,7 @@
 #   czw mark STATE                 from Claude Code hooks: show the session's state in its tab
 #   czw status [--bar|--panel]     which sessions need you (--zjstatus: colored, for the bar)
 #   czw next                       go to the next tab that needs you (Alt a)
+#   czw shell                      show or hide a shell beside this tab's session (Alt n)
 #   czw statusline                 Claude Code's status line (settings.json statusLine)
 #   czw version
 set -euo pipefail
@@ -229,6 +230,51 @@ for mark in ("● ", "✓ "):
   [[ -n "$id" ]] && timeout 3 zellij action go-to-tab-by-id "$id" >/dev/null 2>&1 || true
 }
 
+# A shell beside the session in this tab, shown and hidden in turn. No shell (or one that
+# exited): open one right of the session, in its folder. A shell showing: the session goes
+# full screen over it, the shell still running. The session full screen: back to the split,
+# the shell focused. The shell is the pane titled shell, the session the one running czw
+# claude. Bound to Alt n, it runs in a 1x1 floating pane that has the focus: every step
+# focuses its pane by id first.
+cmd_shell() {
+  local tab plan verb arg
+  tab="$(timeout 3 zellij action list-tabs --json 2>/dev/null | python3 -c '
+import json, sys
+print(next((t["tab_id"] for t in json.load(sys.stdin) if t.get("active")), ""))')" || return 0
+  [[ -n "$tab" ]] || return 0
+  plan="$(timeout 3 zellij action list-panes --json 2>/dev/null | python3 -c '
+import json, re, sys
+tab = int(sys.argv[1])
+panes = [p for p in json.load(sys.stdin) if p.get("tab_id") == tab and not p.get("is_plugin") and not p.get("is_floating")]
+def is_shell(p):
+    return p.get("title") == "shell"
+def runs_claude(p):
+    return re.search(r"(^|[/ ])czw claude ", "%s %s" % (p.get("terminal_command") or "", p.get("pane_command") or ""))
+session = next((p for p in panes if not is_shell(p) and runs_claude(p)), None)
+if session:
+    s = session["id"]
+    shell = next((p for p in panes if is_shell(p) and not p.get("exited")), None)
+    if shell is None:
+        for p in panes:
+            if is_shell(p): print("close", p["id"])
+        print("focus", s)
+        if session.get("is_fullscreen"): print("fullscreen")
+        print("open", session.get("pane_cwd") or "")
+    elif session.get("is_fullscreen"):
+        print("focus", s); print("fullscreen"); print("focus", shell["id"])
+    else:
+        print("focus", s); print("fullscreen")
+' "$tab")" || return 0
+  while read -r verb arg; do
+    case "$verb" in
+      focus) timeout 3 zellij action focus-pane-id "terminal_$arg" >/dev/null ;;
+      close) timeout 3 zellij action close-pane --pane-id "terminal_$arg" ;;
+      fullscreen) timeout 3 zellij action toggle-fullscreen ;;
+      open) timeout 3 zellij action new-pane --direction right --name shell --cwd "${arg:-$PWD}" >/dev/null ;;
+    esac
+  done <<< "$plan"
+}
+
 # Which sessions need you. `czw status` lists the tabs with a marker; `--bar` prints the
 # short summary the status bar shows ("● 2  ✓ 1", or nothing when no one waits);
 # `--panel` prints a "## Sessions" section, one marked line per state, for a side panel.
@@ -293,7 +339,8 @@ case "${1:-}" in
   mark) shift; cmd_mark "$@" ;;
   status) shift; cmd_status "$@" ;;
   next) shift; cmd_next ;;
+  shell) shift; cmd_shell ;;
   statusline) exec python3 "$root/lib/statusline.py" ;;
   version|--version) echo "czw $CZW_VERSION" ;;
-  *) sed -n '2,14p' "$self" | sed 's/^# \{0,1\}//'; exit 1 ;;
+  *) sed -n '2,15p' "$self" | sed 's/^# \{0,1\}//'; exit 1 ;;
 esac
