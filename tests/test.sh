@@ -94,6 +94,9 @@ python3 "$root/lib/layout.py" --default "$cfg/layouts/czw.kdl" czw-test
 grep -q 'Run "czw" "next"' "$cfg/config.kdl" && ok "config: Alt a runs czw next" || ko "config: no Alt a"
 env_run() { PATH="$tmp/bin:$PATH" XDG_STATE_HOME="$tmp/state" "$@"; }
 python3 "$root/lib/layout.py" "$ws" "$tmp/layout.kdl"
+# A czw-test left by a run that just ended may still be shutting down: wait until it is gone.
+zellij delete-session --force czw-test >/dev/null 2>&1
+wait_for "! zellij list-sessions -n 2>/dev/null | grep -q '^czw-test '" 10 || ko "an old czw-test session is still there"
 (env_run setsid script -qfc "zellij --config-dir $cfg --session czw-test --new-session-with-layout $tmp/layout.kdl" /dev/null >/dev/null 2>&1 </dev/null &)
 wait_for "zellij --session czw-test action query-tab-names" && ok "session started" || ko "session did not start"
 [[ "$(zellij --session czw-test action query-tab-names | tr '\n' ' ')" == "alpha b " ]] && ok "tabs come from the workspace layout" || ko "tabs are not the layout's (zellij used another layout)"
@@ -120,7 +123,8 @@ grep -q 'fake claude --resume proj-alpha' "$tmp/calls" && ok "known session resu
 grep -q 'fake claude -n proj-beta' "$tmp/calls" && ok "new session started with its name" || ko "beta not created"
 grep -q 'fake claude --resume proj-alpha (CZW_SESSION=proj-alpha)' "$tmp/calls" && ok "a resumed session gets CZW_SESSION" || ko "alpha without CZW_SESSION"
 grep -q 'fake claude -n proj-beta (CZW_SESSION=proj-beta)' "$tmp/calls" && ok "a new session gets CZW_SESSION" || ko "beta without CZW_SESSION"
-wait_for "grep -qs czw $HOME/.cache/zellij/*/session_info/czw-test/session-layout.kdl" 10 && ok "layout saved for resurrection" || ko "nothing saved"
+# Wait for a save made after go-to-tab 1: an earlier one keeps tab b focused (from next), and Enter would go to beta.
+wait_for "grep -qs 'tab name=\"alpha\" focus=true' $HOME/.cache/zellij/*/session_info/czw-test/session-layout.kdl" 10 && ok "layout saved for resurrection, alpha focused" || ko "nothing saved with alpha focused"
 # shellcheck disable=SC2012 # zellij's cache folder names are its own, plain
 saved="$(ls -d "$HOME/.cache"/zellij/*/session_info/czw-test | head -1)"
 grep -q '"claude" "proj-alpha"' "$saved/session-layout.kdl" && ok "saved command keeps the session name" || ko "saved command lost the name"
