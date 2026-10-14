@@ -113,6 +113,26 @@ the model, and how full the context is (green, yellow, red). In `~/.claude/setti
 "statusLine": { "type": "command", "command": "\"$HOME/.local/bin/czw\" statusline", "padding": 0 }
 ```
 
+## A side panel
+
+`czw status --panel` prints the sessions as a section a side panel can show: a `## `
+heading, then one line per state, starting with the marker a panel colors by.
+
+```
+## Sessions
+● needs you  web
+✓ your turn  review
+⠋ working    api
+```
+
+It prints `no sessions` when the zellij session has no tabs or is not found (or, outside
+zellij, when no `--session NAME` is given), and `nothing waiting` when no tab needs you, is your turn or is working.
+To use it as a panel's sections command, give it the session from the environment:
+
+```
+czw status --panel --session "${ZELLIJ_SESSION_NAME:-work}"
+```
+
 ## Commands
 
 | Command | What it does |
@@ -125,6 +145,7 @@ the model, and how full the context is (green, yellow, red). In `~/.claude/setti
 | `czw list [DIR]` | the sessions a workspace opens |
 | `czw mark STATE` | from a hook: `working`, `done`, `attention`, `idle`, `unblock` (attention back to working) or `clear` |
 | `czw status` | which sessions need you, finished, or work |
+| `czw status --panel` | the same as a `## Sessions` section with `●` / `✓` / `⠋` markers, for a side panel |
 | `czw next` | go to the next tab that needs you (`Alt a`) |
 | `czw statusline` | Claude Code's status line |
 
@@ -156,7 +177,8 @@ Copy is by mouse selection, sent through OSC 52 to the system clipboard.
 
 ## Tests
 
-`make test`: the resurrection hook, the layout, and an end-to-end run with a fake
+`make test`: the resurrection hook, the status line, `czw status` in each mode (from a
+fake zellij), the layout, and an end-to-end run with a fake
 `claude` that opens a workspace, kills the zellij server like a reboot, resurrects it and
 checks that Enter resumes the same session.
 
