@@ -120,7 +120,8 @@ grep -q 'fake claude --resume proj-alpha' "$tmp/calls" && ok "known session resu
 grep -q 'fake claude -n proj-beta' "$tmp/calls" && ok "new session started with its name" || ko "beta not created"
 grep -q 'fake claude --resume proj-alpha (CZW_SESSION=proj-alpha)' "$tmp/calls" && ok "a resumed session gets CZW_SESSION" || ko "alpha without CZW_SESSION"
 grep -q 'fake claude -n proj-beta (CZW_SESSION=proj-beta)' "$tmp/calls" && ok "a new session gets CZW_SESSION" || ko "beta without CZW_SESSION"
-wait_for "grep -qs czw $HOME/.cache/zellij/*/session_info/czw-test/session-layout.kdl" 10 && ok "layout saved for resurrection" || ko "nothing saved"
+# Wait for a save made after go-to-tab 1: an earlier one keeps tab b focused (from next), and Enter would go to beta.
+wait_for "grep -qs 'tab name=\"alpha\" focus=true' $HOME/.cache/zellij/*/session_info/czw-test/session-layout.kdl" 10 && ok "layout saved for resurrection, alpha focused" || ko "nothing saved with alpha focused"
 # shellcheck disable=SC2012 # zellij's cache folder names are its own, plain
 saved="$(ls -d "$HOME/.cache"/zellij/*/session_info/czw-test | head -1)"
 grep -q '"claude" "proj-alpha"' "$saved/session-layout.kdl" && ok "saved command keeps the session name" || ko "saved command lost the name"
