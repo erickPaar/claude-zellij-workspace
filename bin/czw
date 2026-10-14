@@ -71,6 +71,9 @@ cmd_open() {
   cfg="$(config_dir)"
   mkdir -p "$state/workspaces" && echo "$dir" > "$state/workspaces/$name"
   grant_bar
+  # The zellij server copies this shell's environment into every pane: a name from a czw claude
+  # this was started under must not pass for the workspace's.
+  unset CZW_SESSION
   python3 "$root/lib/layout.py" "$dir" "$layout"
   python3 "$root/lib/layout.py" --default "$cfg/layouts/czw.kdl" "$name"
   if [[ "$mode" == --fresh ]] && exists "$name"; then
@@ -92,6 +95,9 @@ cmd_claude() {
   shift
   need claude "https://claude.com/claude-code"
   mkdir -p "$state/known"
+  # The session's name, for what runs inside it (hooks, plugins): Claude Code doesn't pass its
+  # name to every plugin.
+  export CZW_SESSION="$name"
   # claude runs as a child, not exec'd: zellij records THIS command line for
   # resurrection, and a running claude hides its own arguments.
   if [[ -e "$state/known/$name" ]]; then
