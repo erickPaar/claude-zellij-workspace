@@ -94,6 +94,9 @@ python3 "$root/lib/layout.py" --default "$cfg/layouts/czw.kdl" czw-test
 grep -q 'Run "czw" "next"' "$cfg/config.kdl" && ok "config: Alt a runs czw next" || ko "config: no Alt a"
 env_run() { PATH="$tmp/bin:$PATH" XDG_STATE_HOME="$tmp/state" "$@"; }
 python3 "$root/lib/layout.py" "$ws" "$tmp/layout.kdl"
+# A czw-test left by a run that just ended may still be shutting down: wait until it is gone.
+zellij delete-session --force czw-test >/dev/null 2>&1
+wait_for "! zellij list-sessions -n 2>/dev/null | grep -q '^czw-test '" 10 || ko "an old czw-test session is still there"
 (env_run setsid script -qfc "zellij --config-dir $cfg --session czw-test --new-session-with-layout $tmp/layout.kdl" /dev/null >/dev/null 2>&1 </dev/null &)
 wait_for "zellij --session czw-test action query-tab-names" && ok "session started" || ko "session did not start"
 [[ "$(zellij --session czw-test action query-tab-names | tr '\n' ' ')" == "alpha b " ]] && ok "tabs come from the workspace layout" || ko "tabs are not the layout's (zellij used another layout)"
