@@ -97,13 +97,15 @@ terminal can turn into a flashing taskbar button (Windows Terminal: `"bellStyle"
 
 On Windows Terminal, [`examples/windows-terminal-fragment.json`](examples/windows-terminal-fragment.json)
 is a profile with the same colors and font, a bell that flashes the taskbar, and a window
-that dims when it is not in front: save it as
+that turns more transparent when it is not in front: save it as
 `%LOCALAPPDATA%\Microsoft\Windows Terminal\Fragments\czw\czw.json` and restart the terminal.
 
 Two extras make it one window you can always reach. Start it maximized and named, so Claude
 Code's side panes have room (they open by themselves from about 110 columns), from a shortcut
-to `wt.exe -w czw -p "Claude workspace" --maximized`; and bring that window back from anywhere
-with a key, in Windows Terminal's own `settings.json`:
+to `wt.exe -w czw --maximized -p "Claude workspace"` (`--maximized` before `-p`, which starts the
+new tab); and bring that window back from anywhere with a key. In Windows Terminal's own
+`settings.json`, add these to the existing `actions` and `keybindings` arrays (Win+` is otherwise
+quake mode; without a window named `czw`, the key opens a new one with the default profile):
 
 ```json
 "actions": [{ "command": { "action": "globalSummon", "name": "czw", "toggleVisibility": true }, "id": "User.summonCzw" }],
