@@ -60,6 +60,42 @@ got="$(PATH="$tmp/fake:$PATH" ZELLIJ_SESSION_NAME=fake "$root/bin/czw" status --
 : > "$tmp/tabs"
 [[ "$(status)" == "nothing waiting" ]] && ok "status: nothing waiting, unchanged" || ko "status empty: '$(status)'"
 
+# 1d. The bell on "needs you", from a fake zellij that knows one pane. `script` gives the run a
+# terminal, as a session's pane does; setsid leaves czw itself without one, as a hook is.
+mkdir -p "$tmp/fakemark"
+cat > "$tmp/fakemark/zellij" <<'ZJ'
+#!/usr/bin/env bash
+case "$*" in
+  "action list-panes --tab --json") echo "[{\"id\": 1, \"is_plugin\": false, \"tab_id\": 3, \"tab_name\": \"${FAKE_TAB:-a}\"}]" ;;
+  "action list-tabs --json") echo '[]' ;;
+esac
+exit 0
+ZJ
+chmod +x "$tmp/fakemark/zellij"
+nomnt="$(tr ':' '\n' <<<"$PATH" | grep -v '^/mnt/' | paste -sd: -)"
+bell() { # mark [CZW_NOTIFY]: did the run's terminal get a bell? (FAKE_TAB, BELL_PATH from the caller)
+  local out="$tmp/bell.out"; rm -f "$out"
+  env -u DISPLAY -u WAYLAND_DISPLAY PATH="${BELL_PATH:-$tmp/fakemark:$nomnt}" XDG_STATE_HOME="$tmp/state-bell" \
+    ZELLIJ_PANE_ID=1 ZELLIJ_SESSION_NAME=fake CZW_NOTIFY="${2:-auto}" \
+    script -qfc "setsid -w $root/bin/czw mark $1" "$out" >/dev/null 2>&1 </dev/null
+  grep -q $'\a' "$out" && echo yes || echo no
+}
+[[ "$(bell attention)" == yes ]] && ok "mark attention rings the bell in the pane" || ko "mark attention: no bell"
+[[ "$(bell "done")" == no ]] && ok "mark done rings no bell" || ko "mark done rang the bell"
+[[ "$(bell attention bar)" == no ]] && ok "CZW_NOTIFY=bar: no bell" || ko "CZW_NOTIFY=bar rang the bell"
+[[ "$(bell attention off)" == no ]] && ok "CZW_NOTIFY=off: no bell" || ko "CZW_NOTIFY=off rang the bell"
+[[ "$(FAKE_TAB="● a" bell attention)" == no ]] && ok "a tab already marked needs-you rings no second bell" || ko "a repeated attention mark rang again"
+# A ps that fails (an ancestor gone mid-walk, no ps at all) never aborts the mark.
+mkdir -p "$tmp/failps"; printf '#!/usr/bin/env bash\nexit 1\n' > "$tmp/failps/ps"; chmod +x "$tmp/failps/ps"
+rm -rf "$tmp/state-bell"
+BELL_PATH="$tmp/failps:$tmp/fakemark:$nomnt" bell attention >/dev/null
+[[ -s "$tmp/state-bell/czw/status/fake" ]] && ok "a failing ps still lets the mark write the bar's status" || ko "a failing ps aborted the mark"
+# A ps that answers the tty (none) and then fails on the parent: the walk's second step.
+mkdir -p "$tmp/failppid"; printf '#!/usr/bin/env bash\ncase "$*" in *tty=*) echo "?" ;; *) exit 1 ;; esac\n' > "$tmp/failppid/ps"; chmod +x "$tmp/failppid/ps"
+rm -rf "$tmp/state-bell"
+BELL_PATH="$tmp/failppid:$tmp/fakemark:$nomnt" bell attention >/dev/null
+[[ -s "$tmp/state-bell/czw/status/fake" ]] && ok "a ps failing on the parent still lets the mark write the bar's status" || ko "a ps failing on the parent aborted the mark"
+
 # 2. The layout: one tab per session, run through czw, then tabs.kdl.
 ws="$tmp/ws"; mkdir -p "$ws/sub"
 cat > "$ws/sessions.txt" <<TXT

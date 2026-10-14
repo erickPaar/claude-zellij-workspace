@@ -157,6 +157,10 @@ for p in json.load(sys.stdin):
   fi
   new="$marker$base"
   [[ "$new" == "$tab_name" ]] || timeout 3 zellij action rename-tab-by-id "$tab_id" "$new" >/dev/null 2>&1 || true
+  # The bell first, while this process and its parents are still there to lead to the pane.
+  if [[ "$want" == attention && "$new" != "$tab_name" && "${CZW_NOTIFY:-auto}" != off && "${CZW_NOTIFY:-auto}" != bar ]]; then
+    ring_bell
+  fi
   [[ "$want" == attention || "$want" == "done" ]] && [[ "$new" != "$tab_name" ]] && ( notify "$want" "$base" "$tab_id" & )
   # The bar reads this file instead of asking zellij: written only when a mark changes.
   mkdir -p "$state/status"
@@ -190,6 +194,22 @@ print(next((t["tab_id"] for t in json.load(sys.stdin) if t.get("active")), ""))'
   elif command -v osascript >/dev/null; then
     [[ "$active" != "$tab_id" ]] && timeout 5 osascript -e "display notification \"$text\" with title \"$title\"" >/dev/null 2>&1 || true
   fi
+}
+
+# A bell in the session's own pane, so a terminal that flashes on a bell (Windows Terminal's
+# bellStyle "taskbar", for one) shows that a session needs you. Hooks run with no terminal of
+# their own, so the bell goes to the first ancestor that has one (the session's claude). Called
+# from cmd_mark itself, not the background notify: by then this process may be gone. Never fails.
+ring_bell() {
+  local p=$$ t
+  while [[ "$p" =~ ^[0-9]+$ && "$p" -gt 1 ]]; do
+    t="$(ps -o tty= -p "$p" 2>/dev/null | tr -d ' ')" || return 0
+    if [[ -n "$t" && "$t" != "?" && "$t" != "??" ]]; then
+      { printf '\a' > "/dev/$t"; } 2>/dev/null || true
+      return 0
+    fi
+    p="$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' ')" || return 0
+  done
 }
 
 # Go to the next tab that needs you: after the current one, wrapping around, first a ●
