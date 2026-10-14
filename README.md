@@ -161,6 +161,7 @@ czw status --panel --session "${ZELLIJ_SESSION_NAME:-work}"
 | `czw status` | which sessions need you, finished, or work |
 | `czw status --panel` | the same as a `## Sessions` section with `●` / `✓` / `⠋` markers, for a side panel |
 | `czw next` | go to the next tab that needs you (`Alt a`) |
+| `czw shell` | show or hide a shell beside this tab's session (`Alt n`) |
 | `czw statusline` | Claude Code's status line |
 
 A small script per workspace makes it one word: `exec czw open ~/work "$@"`.
@@ -171,11 +172,13 @@ A small script per workspace makes it one word: `exec czw open ~/work "$@"`.
 |---|---|
 | `Alt 1`…`Alt 9`, `Alt 0` | tab 1 to 9; the previous tab |
 | `Alt a` | the next tab that needs you (● first, then ✓) |
+| `Alt n` | a shell beside the session, in its folder; pressed again, hides it (the session full width, the shell still running), then shows it |
 | `Alt h` / `Alt l` | the pane to the left / right, or the next tab past the edge |
 | `Alt g` | command mode: one of the keys below, then back to locked |
 | `Alt g`, `s` / `/` | scroll / search this tab's history |
 | `Alt g`, `e` | open the history in `$EDITOR` |
 | `Alt g`, `f` | full screen |
+| `Alt g`, `n` | the same as `Alt n` |
 | `Alt g`, `w` | session manager |
 | `Alt g`, `t` / `p` | tab mode / pane mode (new, rename, close, split) |
 | `Alt g`, `d` | detach |
@@ -187,18 +190,26 @@ Copy is by mouse selection, sent through OSC 52 to the system clipboard.
 
 - `~/.local/state/czw/known/NAME`: the sessions czw has started, so it resumes them.
 - `~/.local/state/czw/workspaces/SESSION`: which folder a zellij session came from.
+- `~/.local/state/czw/shells/SESSION/TAB`: the id of the pane `Alt n` shows and hides.
 - `~/.cache/czw/`: the generated zellij config folder (`zellij/`) and layouts.
 
 ## Tests
 
-`make test`: the resurrection hook, the status line, `czw status` in each mode (from a
-fake zellij), the layout, and an end-to-end run with a fake
+`make test`: the resurrection hook, the status line, `czw status` in each mode and
+`czw shell` in each state (from a fake zellij), the layout, and an end-to-end run with a fake
 `claude` that opens a workspace, kills the zellij server like a reboot, resurrects it and
 checks that Enter resumes the same session.
 
 ## Known gaps
 
 - Inside zellij, Shift+Enter may arrive as Enter; `\` then Enter, or Ctrl+J, make a new line.
+- `Alt n` knows its shell by the pane id it kept for the tab (in
+  `~/.local/state/czw/shells/`, cleared when `czw open` starts or resurrects the
+  workspace; only `czw open` clears them, so after a resurrection through `zellij attach`
+  or the session manager a stale id can name another pane), else by the title `shell`. With neither, as after a reboot (ids and names
+  gone), the one other pane beside the session becomes its shell, if it still runs; it is
+  only ever hidden, never closed. With two or more others, `Alt n` opens a new shell. A
+  tab with two sessions gets its shell beside the first.
 - Tested on Linux (WSL 2, Ubuntu 22.04) with zellij 0.45.1.
 
 ## License

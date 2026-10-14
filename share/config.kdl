@@ -59,6 +59,7 @@ keybinds clear-defaults=true {
         bind "e" { EditScrollback; SwitchToMode "Locked"; }
         bind "d" { Detach; }
         bind "a" { Run "czw" "next" { floating true; close_on_exit true; x "0"; y "0"; width "1"; height "1"; }; SwitchToMode "Locked"; }
+        bind "n" { Run "czw" "shell" { floating true; close_on_exit true; x "0"; y "0"; width "1"; height "1"; }; SwitchToMode "Locked"; }
         bind "f" { ToggleFocusFullscreen; SwitchToMode "Locked"; }
         bind "1" { GoToTab 1; SwitchToMode "Locked"; }
         bind "2" { GoToTab 2; SwitchToMode "Locked"; }
@@ -85,6 +86,8 @@ keybinds clear-defaults=true {
         bind "Alt 0" { GoToPreviousTab; }
         // The next tab whose session needs you (● first, then ✓), via a 1x1 floating pane.
         bind "Alt a" { Run "czw" "next" { floating true; close_on_exit true; x "0"; y "0"; width "1"; height "1"; }; }
+        // A shell beside the session, shown and hidden in turn (czw shell), the same way.
+        bind "Alt n" { Run "czw" "shell" { floating true; close_on_exit true; x "0"; y "0"; width "1"; height "1"; }; }
         bind "Alt h" { MoveFocusOrTab "Left"; }
         bind "Alt l" { MoveFocusOrTab "Right"; }
     }
