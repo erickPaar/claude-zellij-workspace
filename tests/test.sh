@@ -90,6 +90,11 @@ mkdir -p "$tmp/failps"; printf '#!/usr/bin/env bash\nexit 1\n' > "$tmp/failps/ps
 rm -rf "$tmp/state-bell"
 BELL_PATH="$tmp/failps:$tmp/fakemark:$nomnt" bell attention >/dev/null
 [[ -s "$tmp/state-bell/czw/status/fake" ]] && ok "a failing ps still lets the mark write the bar's status" || ko "a failing ps aborted the mark"
+# A ps that answers the tty (none) and then fails on the parent: the walk's second step.
+mkdir -p "$tmp/failppid"; printf '#!/usr/bin/env bash\ncase "$*" in *tty=*) echo "?" ;; *) exit 1 ;; esac\n' > "$tmp/failppid/ps"; chmod +x "$tmp/failppid/ps"
+rm -rf "$tmp/state-bell"
+BELL_PATH="$tmp/failppid:$tmp/fakemark:$nomnt" bell attention >/dev/null
+[[ -s "$tmp/state-bell/czw/status/fake" ]] && ok "a ps failing on the parent still lets the mark write the bar's status" || ko "a ps failing on the parent aborted the mark"
 
 # 2. The layout: one tab per session, run through czw, then tabs.kdl.
 ws="$tmp/ws"; mkdir -p "$ws/sub"
