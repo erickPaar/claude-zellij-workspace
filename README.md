@@ -190,6 +190,7 @@ Copy is by mouse selection, sent through OSC 52 to the system clipboard.
 
 - `~/.local/state/czw/known/NAME`: the sessions czw has started, so it resumes them.
 - `~/.local/state/czw/workspaces/SESSION`: which folder a zellij session came from.
+- `~/.local/state/czw/shells/SESSION/TAB`: the id of the pane `Alt n` shows and hides.
 - `~/.cache/czw/`: the generated zellij config folder (`zellij/`) and layouts.
 
 ## Tests
@@ -202,8 +203,11 @@ checks that Enter resumes the same session.
 ## Known gaps
 
 - Inside zellij, Shift+Enter may arrive as Enter; `\` then Enter, or Ctrl+J, make a new line.
-- `Alt n` knows its shell by the pane's title, `shell`: a program in it that sets the
-  terminal title makes it a stranger, and the next `Alt n` opens another.
+- `Alt n` knows its shell by the pane id it kept for the tab (in
+  `~/.local/state/czw/shells/`), else by the title `shell`. After a reboot the ids and the
+  names are gone: the one other pane beside the session becomes its shell; with two or
+  more others, `Alt n` opens a new shell. A tab with two sessions gets its shell beside
+  the first.
 - Tested on Linux (WSL 2, Ubuntu 22.04) with zellij 0.45.1.
 
 ## License

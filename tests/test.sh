@@ -96,51 +96,84 @@ rm -rf "$tmp/state-bell"
 BELL_PATH="$tmp/failppid:$tmp/fakemark:$nomnt" bell attention >/dev/null
 [[ -s "$tmp/state-bell/czw/status/fake" ]] && ok "a ps failing on the parent still lets the mark write the bar's status" || ko "a ps failing on the parent aborted the mark"
 
-# 1e. czw shell, from the panes of a fake zellij (tab 1 active): each state gives its calls.
+# 1e. czw shell, from the panes of a fake zellij: each state gives its calls. The helper
+# (pane 7, floating) runs in tab 1 unless helper_tab says otherwise; keep is the id czw kept.
 mkdir -p "$tmp/fake-shell"
 cat > "$tmp/fake-shell/zellij" <<SH
 #!/usr/bin/env bash
 case "\$2" in
-  list-tabs) echo '[{"tab_id": 0, "active": false}, {"tab_id": 1, "active": true}]' ;;
   list-panes) cat "$tmp/panes.json" ;;
+  new-pane) echo "\${*:2}" >> "$tmp/shell-calls"; echo terminal_12 ;;
   *) echo "\${*:2}" >> "$tmp/shell-calls" ;;
 esac
 SH
 chmod +x "$tmp/fake-shell/zellij"
-# Each pane: "ID|TAB|TITLE|COMMAND[|FLAG...]", COMMAND - for none; FLAG fs, exited, plugin,
-# floating, nocwd, or proc (COMMAND is the running process's, not zellij's).
+# Each pane: "ID|TAB|TITLE|COMMAND[|FLAG...]", COMMAND - for none; FLAG exited, plugin,
+# floating, nocwd, proc (COMMAND is the running process's, not zellij's), fs (the tab is
+# full screen: every pane in it says so) or fs1 (only this pane says so).
 shell_case() {
   local label="$1" want="$2" got; shift 2
   python3 -c '
 import json, sys
+specs = [s.split("|") for s in sys.argv[1:]]
+fs_tabs = {f[1] for f in specs if "fs" in f[4:]}
 out = []
-for spec in sys.argv[1:]:
-    f = spec.split("|")
+for f in specs:
     cmd = None if f[3] == "-" else f[3]
     out.append({"id": int(f[0]), "tab_id": int(f[1]), "title": f[2], **({"pane_command": cmd} if "proc" in f[4:] else {"terminal_command": cmd}),
-                "is_fullscreen": "fs" in f[4:], "exited": "exited" in f[4:], "is_plugin": "plugin" in f[4:],
+                "is_fullscreen": f[1] in fs_tabs or "fs1" in f[4:], "exited": "exited" in f[4:], "is_plugin": "plugin" in f[4:],
                 "is_floating": "floating" in f[4:], **({} if "nocwd" in f[4:] else {"pane_cwd": "/w/p"})})
-print(json.dumps(out))' "$@" > "$tmp/panes.json"
+print(json.dumps(out))' "$@" "7|${helper_tab:-1}|czw shell|czw shell|floating" > "$tmp/panes.json"
   : > "$tmp/shell-calls"
-  (cd "$tmp" && PATH="$tmp/fake-shell:$PATH" "$root/bin/czw" shell) || { ko "shell: $label: czw shell failed"; return; }
+  rm -rf "$tmp/shell-state"; mkdir -p "$tmp/shell-state/czw/shells/fake"
+  [[ -n "${keep:-}" ]] && echo "$keep" > "$tmp/shell-state/czw/shells/fake/${helper_tab:-1}"
+  (cd "$tmp" && PATH="$tmp/fake-shell:$PATH" XDG_STATE_HOME="$tmp/shell-state" ZELLIJ_SESSION_NAME=fake ZELLIJ_PANE_ID=7 SHELL=/bin/sh \
+    "$root/bin/czw" shell) || { ko "shell: $label: czw shell failed"; return; }
   got="$(tr '\n' ';' < "$tmp/shell-calls")"
   [[ "$got" == "$want" ]] && ok "shell: $label" || ko "shell: $label: '$got', not '$want'"
 }
+kept_is() { [[ "$(cat "$tmp/shell-state/czw/shells/fake/${helper_tab:-1}" 2>/dev/null)" == "$1" ]] && ok "shell: $2" || ko "shell: $2: kept '$(cat "$tmp/shell-state/czw/shells/fake/${helper_tab:-1}" 2>/dev/null)', not '$1'"; }
 session="0|1|✳ Claude Code|czw claude alpha"
 noise=("4|1|shell|-|plugin" "9|1|shell|-|floating" "5|0|shell|-")
+open_in() { echo "new-pane --direction right --name shell --tab-id $1 --close-on-exit --cwd $2 -- /bin/sh;"; }
 shell_case "no shell: one opens right of the session, in its folder" \
-  "focus-pane-id terminal_0;new-pane --direction right --name shell --cwd /w/p;" "$session" "${noise[@]}"
+  "focus-pane-id terminal_0;$(open_in 1 /w/p)" "$session" "${noise[@]}"
+kept_is 12 "the new shell's id is kept for its tab"
 shell_case "a shell showing: the session goes full screen" \
   "focus-pane-id terminal_0;toggle-fullscreen;" "$session" "3|1|shell|-" "${noise[@]}"
+kept_is 3 "a shell found by its title is kept"
 shell_case "the session full screen: back to the split, the shell focused" \
   "focus-pane-id terminal_0;toggle-fullscreen;focus-pane-id terminal_3;" "$session|fs" "3|1|shell|-" "${noise[@]}"
+shell_case "the same, only the session pane saying full screen" \
+  "focus-pane-id terminal_0;toggle-fullscreen;focus-pane-id terminal_3;" "$session|fs1" "3|1|shell|-"
+shell_case "no shell while the session is full screen: back to the split, then a shell" \
+  "focus-pane-id terminal_0;toggle-fullscreen;$(open_in 1 /w/p)" "$session|fs"
 shell_case "an exited shell counts as none and is replaced" \
-  "close-pane --pane-id terminal_3;focus-pane-id terminal_0;new-pane --direction right --name shell --cwd /w/p;" "$session" "3|1|shell|-|exited"
+  "close-pane --pane-id terminal_3;focus-pane-id terminal_0;$(open_in 1 /w/p)" "$session" "3|1|shell|-|exited"
 shell_case "a tab with no session pane: nothing" "" "2|1|bash|-" "3|1|shell|-"
+shell_case "only czw claude NAME is a session" "" "2|1|a|myczw claude a" "3|1|b|claude --resume b" "6|1|c|czw claude"
 shell_case "a session known by its process only, as after a resurrection" \
   "focus-pane-id terminal_0;toggle-fullscreen;" "0|1|claude|bash /x/czw claude alpha|proc" "3|1|shell|-"
-shell_case "no folder known: the current one" \
-  "focus-pane-id terminal_0;new-pane --direction right --name shell --cwd $tmp;" "$session|nocwd"
+shell_case "no folder known: the current one" "focus-pane-id terminal_0;$(open_in 1 "$tmp")" "$session|nocwd"
+helper_tab=2 shell_case "two clients: the helper's own tab, not the first active one" \
+  "focus-pane-id terminal_10;$(open_in 2 /w/p)" "$session" "3|1|shell|-" "10|2|claude|czw claude beta"
+keep=6 shell_case "the kept id wins over the title" \
+  "focus-pane-id terminal_0;toggle-fullscreen;focus-pane-id terminal_6;" "$session|fs" "3|1|shell|-" "6|1|user@host: ~|-"
+keep=6 shell_case "a retitled shell is still known by its kept id" \
+  "focus-pane-id terminal_0;toggle-fullscreen;" "$session" "6|1|user@host: ~|-" "8|1|htop|-"
+shell_case "two other panes, none kept: the one titled shell" \
+  "focus-pane-id terminal_0;toggle-fullscreen;" "$session" "8|1|htop|-" "3|1|shell|-"
+shell_case "two other panes, none kept nor titled shell exactly: a new shell" \
+  "focus-pane-id terminal_0;$(open_in 1 /w/p)" "$session" "6|1|my shell|-" "8|1|shell2|-"
+keep=3 shell_case "after a resurrection, the one other pane is adopted, not doubled" \
+  "focus-pane-id terminal_0;toggle-fullscreen;" "0|1|bash /x/czw claude alpha|bash /x/czw claude alpha" "1|1|Pane #2|-" "3|0|shell|-"
+kept_is 1 "the adopted shell is kept"
+shell_case "a session named shell is the session, not the shell" \
+  "focus-pane-id terminal_0;toggle-fullscreen;focus-pane-id terminal_3;" "0|1|shell|czw claude shell|fs" "3|1|shell|-"
+shell_case "two session panes: the shell goes beside the first" \
+  "focus-pane-id terminal_0;$(open_in 1 /w/p)" "$session" "2|1|claude|czw claude beta"
+usage="$("$root/bin/czw" 2>/dev/null)"
+[[ "$usage" == *"czw version" && "$usage" != *"set -"* ]] && ok "usage: the header's commands, no code" || ko "usage: '$usage'"
 
 # 2. The layout: one tab per session, run through czw, then tabs.kdl.
 ws="$tmp/ws"; mkdir -p "$ws/sub"

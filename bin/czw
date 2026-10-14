@@ -233,44 +233,57 @@ for mark in ("● ", "✓ "):
 # A shell beside the session in this tab, shown and hidden in turn. No shell (or one that
 # exited): open one right of the session, in its folder. A shell showing: the session goes
 # full screen over it, the shell still running. The session full screen: back to the split,
-# the shell focused. The shell is the pane titled shell, the session the one running czw
-# claude. Bound to Alt n, it runs in a 1x1 floating pane that has the focus: every step
-# focuses its pane by id first.
+# the shell focused. The tab is this pane's own (with two clients, each acts on its own);
+# the session is the pane running czw claude (the first, if two do); the shell is the pane
+# whose id czw kept for this tab, else the one titled shell, else the one other tiled pane
+# (after a resurrection: new ids, names lost). Bound to Alt n, it runs in a 1x1 floating
+# pane that has the focus: every step focuses its pane by id first.
 cmd_shell() {
-  local tab plan verb arg
-  tab="$(timeout 3 zellij action list-tabs --json 2>/dev/null | python3 -c '
-import json, sys
-print(next((t["tab_id"] for t in json.load(sys.stdin) if t.get("active")), ""))')" || return 0
-  [[ -n "$tab" ]] || return 0
+  local kept plan verb arg tab="" id
+  [[ -n "${ZELLIJ_PANE_ID:-}" && -n "${ZELLIJ_SESSION_NAME:-}" ]] || return 0
+  kept="$state/shells/$ZELLIJ_SESSION_NAME"
+  mkdir -p "$kept"
   plan="$(timeout 3 zellij action list-panes --json 2>/dev/null | python3 -c '
-import json, re, sys
-tab = int(sys.argv[1])
-panes = [p for p in json.load(sys.stdin) if p.get("tab_id") == tab and not p.get("is_plugin") and not p.get("is_floating")]
-def is_shell(p):
-    return p.get("title") == "shell"
+import json, os, re, sys
+me, kept = sys.argv[1], sys.argv[2]
+panes = [p for p in json.load(sys.stdin) if not p.get("is_plugin")]
+tab = next((p.get("tab_id") for p in panes if str(p.get("id")) == me), None)
+tiled = [p for p in panes if tab is not None and p.get("tab_id") == tab and not p.get("is_floating")]
 def runs_claude(p):
-    return re.search(r"(^|[/ ])czw claude ", "%s %s" % (p.get("terminal_command") or "", p.get("pane_command") or ""))
-session = next((p for p in panes if not is_shell(p) and runs_claude(p)), None)
+    return any(re.search(r"(^|[ /])czw claude \S", c or "") for c in (p.get("terminal_command"), p.get("pane_command")))
+session = next((p for p in tiled if runs_claude(p)), None)
 if session:
-    s = session["id"]
-    shell = next((p for p in panes if is_shell(p) and not p.get("exited")), None)
-    if shell is None:
-        for p in panes:
-            if is_shell(p): print("close", p["id"])
+    try:
+        kept_id = open(os.path.join(kept, str(tab))).read().strip()
+    except OSError:
+        kept_id = ""
+    others = [p for p in tiled if not runs_claude(p)]
+    shell = (next((p for p in others if str(p.get("id")) == kept_id), None)
+             or next((p for p in others if p.get("title") == "shell"), None)
+             or (others[0] if len(others) == 1 else None))
+    s, fs = session["id"], any(p.get("is_fullscreen") for p in tiled)
+    print("tab", tab)
+    if shell is None or shell.get("exited"):
+        if shell: print("close", shell["id"])
         print("focus", s)
-        if session.get("is_fullscreen"): print("fullscreen")
+        if fs: print("fullscreen")
         print("open", session.get("pane_cwd") or "")
-    elif session.get("is_fullscreen"):
-        print("focus", s); print("fullscreen"); print("focus", shell["id"])
     else:
+        print("keep", shell["id"])
         print("focus", s); print("fullscreen")
-' "$tab")" || return 0
+        if fs: print("focus", shell["id"])
+' "$ZELLIJ_PANE_ID" "$kept")" || return 0
   while read -r verb arg; do
     case "$verb" in
+      tab) tab="$arg" ;;
+      keep) echo "$arg" > "$kept/$tab" ;;
       focus) timeout 3 zellij action focus-pane-id "terminal_$arg" >/dev/null ;;
       close) timeout 3 zellij action close-pane --pane-id "terminal_$arg" ;;
       fullscreen) timeout 3 zellij action toggle-fullscreen ;;
-      open) timeout 3 zellij action new-pane --direction right --name shell --cwd "${arg:-$PWD}" >/dev/null ;;
+      # The shell as the pane's command: zellij 0.45 ignores --cwd for a pane without one.
+      open) id="$(timeout 3 zellij action new-pane --direction right --name shell --tab-id "$tab" --close-on-exit \
+              --cwd "${arg:-$PWD}" -- "${SHELL:-bash}")"
+            echo "${id#terminal_}" > "$kept/$tab" ;;
     esac
   done <<< "$plan"
 }
@@ -342,5 +355,5 @@ case "${1:-}" in
   shell) shift; cmd_shell ;;
   statusline) exec python3 "$root/lib/statusline.py" ;;
   version|--version) echo "czw $CZW_VERSION" ;;
-  *) sed -n '2,15p' "$self" | sed 's/^# \{0,1\}//'; exit 1 ;;
+  *) sed -n '/^set -/q; 2,$p' "$self" | sed 's/^# \{0,1\}//'; exit 1 ;;
 esac
