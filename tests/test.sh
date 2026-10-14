@@ -178,26 +178,37 @@ shell_case "a session named shell is the session, not the shell" \
   "focus-pane-id terminal_0;toggle-fullscreen;focus-pane-id terminal_3;" "0|1|shell|czw claude shell|fs" "3|1|shell|-"
 shell_case "two session panes: the shell goes beside the first" \
   "focus-pane-id terminal_0;$(open_in 1 /w/p)" "$session" "2|1|claude|czw claude beta"
-# czw open forgets the kept shells of a server that starts again (new or resurrected).
+# czw open forgets the kept shells of a server that starts again (new, resurrected, or
+# re-created by --fresh). The fake lists the sessions given, none once one is deleted.
 mkdir -p "$tmp/fake-open" "$tmp/ws-open"
 cat > "$tmp/fake-open/zellij" <<SH
 #!/usr/bin/env bash
-[[ "\$1" == list-sessions ]] && cat "$tmp/open-sessions"
+case "\$1" in
+  list-sessions) [[ -e "$tmp/open-deleted" ]] || if [[ " \$* " == *" -s "* ]]; then sed 's/ \[.*//' "$tmp/open-sessions"; else cat "$tmp/open-sessions"; fi ;;
+  delete-session) touch "$tmp/open-deleted" ;;
+esac
 exit 0
 SH
 chmod +x "$tmp/fake-open/zellij"
-echo alpha > "$tmp/ws-open/sessions.txt"; echo "name = fakews" > "$tmp/ws-open/workspace.conf"
+echo alpha > "$tmp/ws-open/sessions.txt"
+# open_case LABEL SESSIONS WANT [NAME] [--fresh]
 open_case() {
-  printf '%s\n' "$2" > "$tmp/open-sessions"
-  mkdir -p "$tmp/open-state/czw/shells/fakews"; echo 3 > "$tmp/open-state/czw/shells/fakews/0"
-  (unset ZELLIJ; PATH="$tmp/fake-open:$PATH" XDG_STATE_HOME="$tmp/open-state" XDG_CACHE_HOME="$tmp/open-cache" \
-    XDG_DATA_HOME="$tmp/open-data" "$root/bin/czw" open "$tmp/ws-open" >/dev/null 2>&1)
-  [[ "$([[ -e "$tmp/open-state/czw/shells/fakews/0" ]] && echo kept || echo cleared)" == "$3" ]] && ok "open: $1" || ko "open: $1: not $3"
+  local name="${4:-fakews}"
+  printf '%s\n' "$2" > "$tmp/open-sessions"; rm -f "$tmp/open-deleted"
+  echo "name = $name" > "$tmp/ws-open/workspace.conf"
+  mkdir -p "$tmp/open-state/czw/shells/$name"; echo 3 > "$tmp/open-state/czw/shells/$name/0"
+  (unset ZELLIJ; echo y | PATH="$tmp/fake-open:$PATH" XDG_STATE_HOME="$tmp/open-state" XDG_CACHE_HOME="$tmp/open-cache" \
+    XDG_DATA_HOME="$tmp/open-data" "$root/bin/czw" open "$tmp/ws-open" ${5:+"$5"} >/dev/null 2>&1)
+  [[ "$([[ -e "$tmp/open-state/czw/shells/$name/0" ]] && echo kept || echo cleared)" == "$3" ]] && ok "open: $1" || ko "open: $1: not $3"
 }
 open_case "a new session: kept shells cleared" "other [Created 1m ago]" cleared
 open_case "a resurrected session: kept shells cleared" "fakews [Created 1h ago] (EXITED - attach to resurrect)" cleared
 open_case "a running session: kept shells stay" "fakews [Created 1h ago]" kept
 open_case "a running session with a longer name: no match" "fakews2 [Created 1h ago]" cleared
+open_case "a running session, --fresh: deleted, then cleared" "fakews [Created 1h ago]" cleared fakews --fresh
+open_case "a running session named with a space: kept shells stay" "my ws [Created 1h ago]" kept "my ws"
+open_case "a running session with EXITED in its name: kept shells stay" "wsEXITED [Created 1h ago]" kept wsEXITED
+open_case "a resurrected session with EXITED in its name: cleared" "wsEXITED [Created 1h ago] (EXITED - attach to resurrect)" cleared wsEXITED
 usage="$("$root/bin/czw" 2>/dev/null)"
 [[ "$usage" == *"czw version" && "$usage" != *"set -"* ]] && ok "usage: the header's commands, no code" || ko "usage: '$usage'"
 

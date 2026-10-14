@@ -40,7 +40,14 @@ config_dir() {
 }
 
 exists() { zellij list-sessions -n -s 2>/dev/null | grep -qx "$1"; }
-running() { zellij list-sessions -n 2>/dev/null | awk -v n="$1" '$1 == n && !/EXITED/ { f = 1 } END { exit !f }'; }
+# Running, not exited: the name compared whole, like exists(), then what zellij adds after it.
+running() {
+  local line
+  while IFS= read -r line; do
+    [[ "$line" == "$1 ["* && "${line#"$1 "}" != *"(EXITED"* ]] && return 0
+  done < <(zellij list-sessions -n 2>/dev/null)
+  return 1
+}
 
 # zjstatus asks for permissions in the one-line bar, where the prompt is easy to miss and
 # the bar stays blank until answered. czw pins the plugin it installs, so it grants them.
