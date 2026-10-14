@@ -40,6 +40,7 @@ config_dir() {
 }
 
 exists() { zellij list-sessions -n -s 2>/dev/null | grep -qx "$1"; }
+running() { zellij list-sessions -n 2>/dev/null | awk -v n="$1" '$1 == n && !/EXITED/ { f = 1 } END { exit !f }'; }
 
 # zjstatus asks for permissions in the one-line bar, where the prompt is easy to miss and
 # the bar stays blank until answered. czw pins the plugin it installs, so it grants them.
@@ -82,6 +83,8 @@ cmd_open() {
     [[ "$ok" == [yY] ]] || exit 1
     zellij delete-session --force "$name" >/dev/null
   fi
+  # Pane ids start again in a new or resurrected server: the shells Alt n kept are stale.
+  running "$name" || rm -rf "$state/shells/$name"
   if exists "$name"; then
     if [[ "$mode" == --all ]]; then
       exec zellij --config-dir "$cfg" attach "$name" --force-run-commands
@@ -236,8 +239,9 @@ for mark in ("● ", "✓ "):
 # the shell focused. The tab is this pane's own (with two clients, each acts on its own);
 # the session is the pane running czw claude (the first, if two do); the shell is the pane
 # whose id czw kept for this tab, else the one titled shell, else the one other tiled pane
-# (after a resurrection: new ids, names lost). Bound to Alt n, it runs in a 1x1 floating
-# pane that has the focus: every step focuses its pane by id first.
+# if it runs (after a resurrection: new ids, names lost); only a kept or titled shell that
+# exited is closed and replaced. Bound to Alt n, it runs in a 1x1 floating pane that has
+# the focus: every step focuses its pane by id first.
 cmd_shell() {
   local kept plan verb arg tab="" id
   [[ -n "${ZELLIJ_PANE_ID:-}" && -n "${ZELLIJ_SESSION_NAME:-}" ]] || return 0
@@ -259,8 +263,10 @@ if session:
         kept_id = ""
     others = [p for p in tiled if not runs_claude(p)]
     shell = (next((p for p in others if str(p.get("id")) == kept_id), None)
-             or next((p for p in others if p.get("title") == "shell"), None)
-             or (others[0] if len(others) == 1 else None))
+             or next((p for p in others if p.get("title") == "shell"), None))
+    # The one other pane is adopted only while it runs: one that exited is left alone.
+    if shell is None and len(others) == 1 and not others[0].get("exited"):
+        shell = others[0]
     s, fs = session["id"], any(p.get("is_fullscreen") for p in tiled)
     print("tab", tab)
     if shell is None or shell.get("exited"):

@@ -204,10 +204,11 @@ checks that Enter resumes the same session.
 
 - Inside zellij, Shift+Enter may arrive as Enter; `\` then Enter, or Ctrl+J, make a new line.
 - `Alt n` knows its shell by the pane id it kept for the tab (in
-  `~/.local/state/czw/shells/`), else by the title `shell`. After a reboot the ids and the
-  names are gone: the one other pane beside the session becomes its shell; with two or
-  more others, `Alt n` opens a new shell. A tab with two sessions gets its shell beside
-  the first.
+  `~/.local/state/czw/shells/`, cleared when `czw open` starts or resurrects the
+  workspace), else by the title `shell`. With neither, as after a reboot (ids and names
+  gone), the one other pane beside the session becomes its shell, if it still runs; it is
+  only ever hidden, never closed. With two or more others, `Alt n` opens a new shell. A
+  tab with two sessions gets its shell beside the first.
 - Tested on Linux (WSL 2, Ubuntu 22.04) with zellij 0.45.1.
 
 ## License

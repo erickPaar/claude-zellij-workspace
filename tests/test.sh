@@ -150,6 +150,12 @@ shell_case "no shell while the session is full screen: back to the split, then a
   "focus-pane-id terminal_0;toggle-fullscreen;$(open_in 1 /w/p)" "$session|fs"
 shell_case "an exited shell counts as none and is replaced" \
   "close-pane --pane-id terminal_3;focus-pane-id terminal_0;$(open_in 1 /w/p)" "$session" "3|1|shell|-|exited"
+shell_case "one other pane, exited, not titled shell: not closed, a shell beside it" \
+  "focus-pane-id terminal_0;$(open_in 1 /w/p)" "$session" "3|1|build|make|exited"
+keep=6 shell_case "the kept shell, retitled and exited: closed and replaced" \
+  "close-pane --pane-id terminal_6;focus-pane-id terminal_0;$(open_in 1 /w/p)" "$session" "6|1|user@host: ~|-|exited"
+keep=0 shell_case "a kept id that is the session's own: not the shell" \
+  "focus-pane-id terminal_0;$(open_in 1 /w/p)" "$session"
 shell_case "a tab with no session pane: nothing" "" "2|1|bash|-" "3|1|shell|-"
 shell_case "only czw claude NAME is a session" "" "2|1|a|myczw claude a" "3|1|b|claude --resume b" "6|1|c|czw claude"
 shell_case "a session known by its process only, as after a resurrection" \
@@ -172,6 +178,26 @@ shell_case "a session named shell is the session, not the shell" \
   "focus-pane-id terminal_0;toggle-fullscreen;focus-pane-id terminal_3;" "0|1|shell|czw claude shell|fs" "3|1|shell|-"
 shell_case "two session panes: the shell goes beside the first" \
   "focus-pane-id terminal_0;$(open_in 1 /w/p)" "$session" "2|1|claude|czw claude beta"
+# czw open forgets the kept shells of a server that starts again (new or resurrected).
+mkdir -p "$tmp/fake-open" "$tmp/ws-open"
+cat > "$tmp/fake-open/zellij" <<SH
+#!/usr/bin/env bash
+[[ "\$1" == list-sessions ]] && cat "$tmp/open-sessions"
+exit 0
+SH
+chmod +x "$tmp/fake-open/zellij"
+echo alpha > "$tmp/ws-open/sessions.txt"; echo "name = fakews" > "$tmp/ws-open/workspace.conf"
+open_case() {
+  printf '%s\n' "$2" > "$tmp/open-sessions"
+  mkdir -p "$tmp/open-state/czw/shells/fakews"; echo 3 > "$tmp/open-state/czw/shells/fakews/0"
+  (unset ZELLIJ; PATH="$tmp/fake-open:$PATH" XDG_STATE_HOME="$tmp/open-state" XDG_CACHE_HOME="$tmp/open-cache" \
+    XDG_DATA_HOME="$tmp/open-data" "$root/bin/czw" open "$tmp/ws-open" >/dev/null 2>&1)
+  [[ "$([[ -e "$tmp/open-state/czw/shells/fakews/0" ]] && echo kept || echo cleared)" == "$3" ]] && ok "open: $1" || ko "open: $1: not $3"
+}
+open_case "a new session: kept shells cleared" "other [Created 1m ago]" cleared
+open_case "a resurrected session: kept shells cleared" "fakews [Created 1h ago] (EXITED - attach to resurrect)" cleared
+open_case "a running session: kept shells stay" "fakews [Created 1h ago]" kept
+open_case "a running session with a longer name: no match" "fakews2 [Created 1h ago]" cleared
 usage="$("$root/bin/czw" 2>/dev/null)"
 [[ "$usage" == *"czw version" && "$usage" != *"set -"* ]] && ok "usage: the header's commands, no code" || ko "usage: '$usage'"
 
