@@ -15,12 +15,24 @@
       "name": "Claude workspace",
       "commandline": "wsl.exe -- bash -lic \"czw open ~/work\"",
       "colorScheme": "Catppuccin Mocha (czw)",
-      "font": { "face": "JetBrainsMono Nerd Font Mono", "size": 11 },
+      "font": {
+        "face": "JetBrainsMono Nerd Font Mono",
+        "size": 11
+      },
       "padding": "10, 8, 10, 4",
       "cursorShape": "bar",
       "scrollbarState": "hidden",
       "suppressApplicationTitle": true,
-      "closeOnExit": "graceful"
+      "closeOnExit": "graceful",
+      "bellStyle": [
+        "taskbar",
+        "window"
+      ],
+      "opacity": 95,
+      "useAcrylic": true,
+      "unfocusedAppearance": {
+        "opacity": 85
+      }
     }
   ]
 }

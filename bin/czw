@@ -180,6 +180,7 @@ print(next((t["tab_id"] for t in json.load(sys.stdin) if t.get("active")), ""))'
     timeout 2 zellij pipe "zjstatus::notify::$title" </dev/null >/dev/null 2>&1 || true
   fi
   [[ "${CZW_NOTIFY:-auto}" == bar ]] && return 0
+  [[ "$want" == attention ]] && ring_bell
   if command -v powershell.exe >/dev/null; then
     # On WSL: a Windows toast, only when Windows Terminal is not in front (in front, the
     # bar already says it).
@@ -190,6 +191,22 @@ print(next((t["tab_id"] for t in json.load(sys.stdin) if t.get("active")), ""))'
   elif command -v osascript >/dev/null; then
     [[ "$active" != "$tab_id" ]] && timeout 5 osascript -e "display notification \"$text\" with title \"$title\"" >/dev/null 2>&1 || true
   fi
+}
+
+# A bell in the session's own pane, so a terminal that flashes on a bell (Windows Terminal's
+# bellStyle "taskbar", for one) shows that a session needs you. Hooks run with no terminal of
+# their own, so the bell goes to the first ancestor's (the session's claude).
+ring_bell() {
+  local p=$$ t
+  while [[ "$p" -gt 1 ]]; do
+    t="$(ps -o tty= -p "$p" 2>/dev/null | tr -d ' ')"
+    if [[ -n "$t" && "$t" != "?" ]]; then
+      printf '\a' > "/dev/$t" 2>/dev/null || true
+      return 0
+    fi
+    p="$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' ')"
+    [[ -n "$p" ]] || return 0
+  done
 }
 
 # Go to the next tab that needs you: after the current one, wrapping around, first a ●

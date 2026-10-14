@@ -92,11 +92,23 @@ would sit unseen in the one-line bar.
 When the terminal is not in front, a waiting or finished session also raises a desktop
 notification: a Windows toast from WSL (Windows Terminal's, so a click brings it back),
 `notify-send` on Linux, `osascript` on macOS. `CZW_NOTIFY=bar` keeps only the bar,
-`CZW_NOTIFY=off` neither.
+`CZW_NOTIFY=off` neither. A session that needs you also rings the bell in its pane, which a
+terminal can turn into a flashing taskbar button (Windows Terminal: `"bellStyle": ["taskbar", "window"]`).
 
 On Windows Terminal, [`examples/windows-terminal-fragment.json`](examples/windows-terminal-fragment.json)
-is a profile with the same colors and font: save it as
+is a profile with the same colors and font, a bell that flashes the taskbar, and a window
+that dims when it is not in front: save it as
 `%LOCALAPPDATA%\Microsoft\Windows Terminal\Fragments\czw\czw.json` and restart the terminal.
+
+Two extras make it one window you can always reach. Start it maximized and named, so Claude
+Code's side panes have room (they open by themselves from about 110 columns), from a shortcut
+to `wt.exe -w czw -p "Claude workspace" --maximized`; and bring that window back from anywhere
+with a key, in Windows Terminal's own `settings.json`:
+
+```json
+"actions": [{ "command": { "action": "globalSummon", "name": "czw", "toggleVisibility": true }, "id": "User.summonCzw" }],
+"keybindings": [{ "id": "User.summonCzw", "keys": "win+`" }]
+```
 
 ## The status line
 
