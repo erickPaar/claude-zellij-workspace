@@ -212,6 +212,9 @@ open_case "a resurrected session with EXITED in its name: cleared" "wsEXITED [Cr
 usage="$("$root/bin/czw" 2>/dev/null)"
 [[ "$usage" == *"czw version" && "$usage" != *"set -"* ]] && ok "usage: the header's commands, no code" || ko "usage: '$usage'"
 
+python3 -c 'import json,sys; h=json.load(open(sys.argv[1]))["hooks"]["Notification"]; sys.exit(not all(e.get("matcher")=="permission_prompt|elicitation_dialog" for e in h))' "$root/examples/claude-settings-hooks.json" \
+  && ok "example hooks: needs-you only on a permission prompt or a question, not idle_prompt" || ko "example hooks: the Notification hook has no matcher"
+
 # 2. The layout: one tab per session, run through czw, then tabs.kdl.
 ws="$tmp/ws"; mkdir -p "$ws/sub"
 cat > "$ws/sessions.txt" <<TXT
@@ -258,6 +261,11 @@ mark() { (cd "$tmp" && CZW_NOTIFY=off XDG_STATE_HOME="$tmp/state" ZELLIJ_SESSION
 [[ "$(mark attention)" == "● alpha" ]] && ok "mark: attention replaces the old marker" || ko "mark attention"
 [[ "$(mark unblock)" == " alpha" ]] && ok "mark: unblock turns attention into working" || ko "mark unblock"
 [[ "$(mark unblock)" == " alpha" ]] && ok "mark: unblock leaves other states alone" || ko "mark unblock twice"
+[[ "$(mark "done" >/dev/null; mark unblock)" == "✓ alpha" ]] && ok "mark: unblock leaves a fresh done alone (the last tool's async hook)" || ko "mark unblock undid a fresh done"
+echo $(( $(date +%s) - 10 )) >"$tmp/state/czw/done/czw-test-0"
+[[ "$(mark unblock)" == " alpha" ]] && ok "mark: unblock turns an older done into working (a turn with no prompt)" || ko "mark unblock left an old done"
+mark "done" >/dev/null; echo abc >"$tmp/state/czw/done/czw-test-0"
+[[ "$(mark unblock)" == " alpha" ]] && ok "mark: a garbage done stamp neither aborts the hook nor keeps done" || ko "mark unblock with a garbage stamp"
 [[ "$(mark idle)" == "○ alpha" ]] && ok "mark: idle" || ko "mark idle"
 [[ "$(mark working)" == " alpha" ]] && ok "mark: working replaces idle" || ko "mark working"
 grep -q '● 1' "$tmp/state/czw/status/czw-test" 2>/dev/null || [[ -f "$tmp/state/czw/status/czw-test" ]] && ok "mark: writes the bar's status file in the state folder" || ko "mark: no status file"

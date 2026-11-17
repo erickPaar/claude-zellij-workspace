@@ -157,7 +157,7 @@ czw status --panel --session "${ZELLIJ_SESSION_NAME:-work}"
 | `czw new NAME [FOLDER] [TAB]` | inside a workspace: a new named session in a new tab, added to `sessions.txt` |
 | `czw claude NAME` | run session NAME: resume it, or start it with that name the first time; `CZW_SESSION` holds NAME inside it, for hooks and plugins (everything the session starts inherits it, a nested `claude -p` included, and it stays NAME after `/resume`) |
 | `czw list [DIR]` | the sessions a workspace opens |
-| `czw mark STATE` | from a hook: `working`, `done`, `attention`, `idle`, `unblock` (attention back to working) or `clear` |
+| `czw mark STATE` | from a hook: `working`, `done`, `attention`, `idle`, `unblock` (after a tool: attention, or a done older than 5 s, back to working) or `clear` |
 | `czw status` | which sessions need you, finished, or work |
 | `czw status --panel` | the same as a `## Sessions` section with `●` / `✓` / `⠋` markers, for a side panel |
 | `czw next` | go to the next tab that needs you (`Alt a`) |
