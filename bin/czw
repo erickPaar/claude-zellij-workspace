@@ -166,11 +166,12 @@ for p in json.load(sys.stdin):
   [[ -n "${tab_id:-}" ]] || return 0
   base="$tab_name"
   for m in " " "… " "✓ " "● " "○ "; do base="${base#"$m"}"; done
-  local stamp="$state/done/$ZELLIJ_SESSION_NAME-$pane"
+  local t stamp="$state/done/$ZELLIJ_SESSION_NAME-$pane"
   if [[ "$want" == unblock ]]; then
     case "$tab_name" in
       "● "*) ;;
-      "✓ "*) (( $(date +%s) - $(cat "$stamp" 2>/dev/null || echo 0) < 5 )) && return 0 ;;
+      "✓ "*) t=$(cat "$stamp" 2>/dev/null || true); [[ "$t" =~ ^[0-9]+$ ]] || t=0
+             (( $(date +%s) - t < 5 )) && return 0 ;;
       *) return 0 ;;
     esac
     marker=" "

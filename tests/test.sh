@@ -264,6 +264,8 @@ mark() { (cd "$tmp" && CZW_NOTIFY=off XDG_STATE_HOME="$tmp/state" ZELLIJ_SESSION
 [[ "$(mark "done" >/dev/null; mark unblock)" == "✓ alpha" ]] && ok "mark: unblock leaves a fresh done alone (the last tool's async hook)" || ko "mark unblock undid a fresh done"
 echo $(( $(date +%s) - 10 )) >"$tmp/state/czw/done/czw-test-0"
 [[ "$(mark unblock)" == " alpha" ]] && ok "mark: unblock turns an older done into working (a turn with no prompt)" || ko "mark unblock left an old done"
+mark "done" >/dev/null; echo abc >"$tmp/state/czw/done/czw-test-0"
+[[ "$(mark unblock)" == " alpha" ]] && ok "mark: a garbage done stamp neither aborts the hook nor keeps done" || ko "mark unblock with a garbage stamp"
 [[ "$(mark idle)" == "○ alpha" ]] && ok "mark: idle" || ko "mark idle"
 [[ "$(mark working)" == " alpha" ]] && ok "mark: working replaces idle" || ko "mark working"
 grep -q '● 1' "$tmp/state/czw/status/czw-test" 2>/dev/null || [[ -f "$tmp/state/czw/status/czw-test" ]] && ok "mark: writes the bar's status file in the state folder" || ko "mark: no status file"
