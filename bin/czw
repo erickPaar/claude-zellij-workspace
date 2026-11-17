@@ -142,7 +142,8 @@ cmd_new() {
 #   task yet), clear "name". `unblock` runs after each tool. A tool runs only while the
 #   session works, so it turns attention, or done, back into working: a turn that a
 #   background task or another session started fires no prompt hook. It leaves a done
-#   younger than 5 s alone, as unblock runs async and the last tool's may land after Stop.
+#   younger than 5 s alone, as unblock runs async and the last tool's may land after Stop:
+#   a heuristic, since a hook delayed past 5 s still turns a finished tab into working.
 #   Outside zellij: no-op.
 cmd_mark() {
   local want="${1:-}" marker="" pane tab_id tab_name base new
@@ -169,12 +170,15 @@ for p in json.load(sys.stdin):
   if [[ "$want" == unblock ]]; then
     case "$tab_name" in
       "● "*) ;;
-      "✓ "*) [[ -n "$(find "$stamp" -newermt '-5 seconds' 2>/dev/null)" ]] && return 0 ;;
+      "✓ "*) (( $(date +%s) - $(cat "$stamp" 2>/dev/null || echo 0) < 5 )) && return 0 ;;
       *) return 0 ;;
     esac
     marker=" "
   fi
-  [[ "$want" != "done" ]] || { mkdir -p "$state/done" && touch "$stamp"; }
+  case "$want" in
+    done) mkdir -p "$state/done" && date +%s >"$stamp" ;;
+    working|clear) rm -f "$stamp" ;;
+  esac
   new="$marker$base"
   [[ "$new" == "$tab_name" ]] || timeout 3 zellij action rename-tab-by-id "$tab_id" "$new" >/dev/null 2>&1 || true
   # The bell first, while this process and its parents are still there to lead to the pane.
